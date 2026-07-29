@@ -34,6 +34,7 @@
 
   .content{flex:1;padding:16px 16px 20px;overflow-y:auto;}
 
+  /* Family list */
   .search{background:var(--surface);border:1px solid var(--line);border-radius:24px;
     padding:10px 16px;font-size:13.5px;color:var(--ink-faint);margin-bottom:14px;}
   .fam-count{font-size:13px;font-weight:700;color:var(--ink-soft);margin:4px 0 10px;}
@@ -51,8 +52,15 @@
     text-align:center;color:var(--ink-faint);font-size:13px;cursor:pointer;margin-top:4px;}
   .trust-note{text-align:center;color:var(--ink-faint);font-size:11.5px;margin-top:22px;line-height:1.6;padding:0 20px;}
 
+  /* Member overview */
   .stat-row{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;}
-  .stat-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;}
+  .stat-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;cursor:pointer;}
+  .stat-card:active{background:var(--surface-2);}
+  .sheet-row{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);gap:8px;}
+  .sheet-row:last-child{border-bottom:none;}
+  .sheet-row .st{font-size:10.5px;color:var(--ink-faint);font-weight:700;}
+  .sheet-row .stitle{font-size:13.5px;font-weight:700;}
+  .sheet-row .snote{font-size:12px;color:var(--ink-soft);margin-top:1px;}
   .stat-card .n{font-size:20px;font-weight:800;}
   .stat-card .l{font-size:11px;color:var(--ink-faint);margin-top:1px;}
 
@@ -108,6 +116,7 @@
   .btn.ghost{background:var(--surface-2);color:var(--ink-soft);}
   .btn.ask{background:var(--amber);color:#2A1B08;}
 
+  /* Bottom nav */
   .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;
     background:var(--surface);border-top:1px solid var(--line);display:flex;z-index:10;}
   .nav-item{flex:1;text-align:center;padding:9px 4px 10px;font-size:10.5px;color:var(--ink-faint);
@@ -115,6 +124,7 @@
   .nav-item .ic{font-size:17px;display:block;margin-bottom:2px;}
   .nav-item.active{color:var(--navy);}
 
+  /* Modal */
   .modal-bg{position:fixed;inset:0;background:rgba(18,24,43,0.45);display:flex;align-items:flex-end;z-index:50;}
   .modal{background:var(--surface);width:100%;max-width:460px;margin:0 auto;border-radius:18px 18px 0 0;
     padding:18px 18px 26px;max-height:88vh;overflow-y:auto;}
@@ -135,6 +145,7 @@
   .field textarea{resize:vertical;min-height:56px;}
   .modal-actions{display:flex;gap:8px;margin-top:6px;}
 
+  /* Assistant */
   .chat-log{display:flex;flex-direction:column;gap:10px;margin-bottom:12px;}
   .msg{max-width:85%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.55;white-space:pre-wrap;}
   .msg.user{align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:3px;}
@@ -164,6 +175,7 @@
 <div class="app" id="app"></div>
 
 <script>
+/* ---------- Seed data: fictional Sharma family ---------- */
 function seedData(){
   return {
     members: [
@@ -203,10 +215,18 @@ function seedData(){
 
 let state = null;
 let loading = false;
-let modal = null;
+let modal = null; // {type:'add', category:'medication'|'condition'|'allergy'|'visit'|'reading'}
+let sheet = null; // 'meds' | 'conditions' | 'allergies' | 'visits' | null
+
+function openSheet(type){ sheet = type; render(); }
+function closeSheet(){ sheet = null; render(); }
+function sheetEditMed(mid,id){ sheet = null; openEditMed(mid,id); }
+function sheetEditTimeline(mid,id){ sheet = null; openEditTimeline(mid,id); }
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
 
+/* Session-only persistence: fresh Sharma data every new tab/visit,
+   but edits stick while you navigate around within the same tab. */
 function loadState(){
   try{
     const raw = sessionStorage.getItem('vault-demo-state');
@@ -241,14 +261,27 @@ function addMember(){
   save(); render();
 }
 
-function openAddModal(){ modal = {category:'medication'}; render(); }
+function openAddModal(){ modal = {category:'medication', editId:null, editType:null}; render(); }
+function openEditMed(memberId, medId){
+  const med = (state.meds[memberId]||[]).find(x=>x.id===medId);
+  if(!med) return;
+  modal = {category:'medication', editId:medId, editType:'med'};
+  render();
+}
+function openEditTimeline(memberId, entryId){
+  const entry = (state.timeline[memberId]||[]).find(x=>x.id===entryId);
+  if(!entry) return;
+  modal = {category:entry.type, editId:entryId, editType:'timeline'};
+  render();
+}
 function closeModal(){ modal = null; render(); }
-function pickCategory(c){ modal.category = c; render(); }
+function pickCategory(c){ if(modal.editId) return; modal.category = c; render(); }
 
 function submitModal(e){
   e.preventDefault();
   const m = activeMember();
   const cat = modal.category;
+
   if(cat === 'medication'){
     const name = document.getElementById('f-name').value.trim();
     const dose = document.getElementById('f-dose').value.trim();
@@ -256,14 +289,24 @@ function submitModal(e){
     const notes = document.getElementById('f-notes').value.trim();
     if(!name) return;
     if(!state.meds[m.id]) state.meds[m.id]=[];
-    state.meds[m.id].push({id:uid(),name,dose,status,notes});
+    if(modal.editId){
+      const med = state.meds[m.id].find(x=>x.id===modal.editId);
+      if(med){ med.name=name; med.dose=dose; med.status=status; med.notes=notes; }
+    } else {
+      state.meds[m.id].push({id:uid(),name,dose,status,notes});
+    }
   } else if(cat === 'reading'){
     const metric = document.getElementById('f-metric').value;
     const value = parseFloat(document.getElementById('f-value').value);
     const date = document.getElementById('f-date').value || new Date().toISOString().slice(0,10);
     if(!value) return;
     if(!state.timeline[m.id]) state.timeline[m.id]=[];
-    state.timeline[m.id].push({id:uid(),date,type:'reading',title:metric,metric,value,unit: metric==='Blood Sugar'?'mg/dL':'mmHg',note:''});
+    if(modal.editId){
+      const entry = state.timeline[m.id].find(x=>x.id===modal.editId);
+      if(entry){ entry.date=date; entry.metric=metric; entry.title=metric; entry.value=value; entry.unit= metric==='Blood Sugar'?'mg/dL':'mmHg'; }
+    } else {
+      state.timeline[m.id].push({id:uid(),date,type:'reading',title:metric,metric,value,unit: metric==='Blood Sugar'?'mg/dL':'mmHg',note:''});
+    }
   } else if(cat === 'visit'){
     const title = document.getElementById('f-title').value.trim();
     const date = document.getElementById('f-date').value || new Date().toISOString().slice(0,10);
@@ -272,22 +315,39 @@ function submitModal(e){
     const followup = document.getElementById('f-followup').value;
     if(!title) return;
     if(!state.timeline[m.id]) state.timeline[m.id]=[];
-    state.timeline[m.id].push({id:uid(),date,type:'visit',title,doctor,diagnosis,followup,note:diagnosis});
+    if(modal.editId){
+      const entry = state.timeline[m.id].find(x=>x.id===modal.editId);
+      if(entry){ entry.title=title; entry.date=date; entry.doctor=doctor; entry.diagnosis=diagnosis; entry.followup=followup; entry.note=diagnosis; }
+    } else {
+      state.timeline[m.id].push({id:uid(),date,type:'visit',title,doctor,diagnosis,followup,note:diagnosis});
+    }
   } else {
     const title = document.getElementById('f-title').value.trim();
     const date = document.getElementById('f-date').value || new Date().toISOString().slice(0,10);
     const note = document.getElementById('f-notes').value.trim();
     if(!title) return;
     if(!state.timeline[m.id]) state.timeline[m.id]=[];
-    state.timeline[m.id].push({id:uid(),date,type:cat,title,note});
+    if(modal.editId){
+      const entry = state.timeline[m.id].find(x=>x.id===modal.editId);
+      if(entry){ entry.title=title; entry.date=date; entry.note=note; }
+    } else {
+      state.timeline[m.id].push({id:uid(),date,type:cat,title,note});
+    }
   }
   save(); modal=null; render();
 }
 
-function delMed(memberId,id){ state.meds[memberId]=(state.meds[memberId]||[]).filter(x=>x.id!==id); save(); render(); }
-function delTimeline(memberId,id){ state.timeline[memberId]=(state.timeline[memberId]||[]).filter(x=>x.id!==id); save(); render(); }
+function delMed(memberId,id){
+  if(!confirm('Remove this medication?')) return;
+  state.meds[memberId]=(state.meds[memberId]||[]).filter(x=>x.id!==id); save(); render();
+}
+function delTimeline(memberId,id){
+  if(!confirm('Remove this timeline entry?')) return;
+  state.timeline[memberId]=(state.timeline[memberId]||[]).filter(x=>x.id!==id); save(); render();
+}
 function updateField(memberId,field,value){ const m=state.members.find(x=>x.id===memberId); if(m) m[field]=value; save(); }
 
+/* ---------- Assistant ---------- */
 function compileRecordText(memberId){
   const m = state.members.find(x=>x.id===memberId);
   const meds = medsFor(memberId); const tl = timelineFor(memberId);
@@ -329,8 +389,10 @@ async function askAI(){
   loading = false; save(); render();
 }
 
+/* ---------- Export ---------- */
 function exportSummary(){ window.print(); }
 
+/* ---------- Trend chart (simple inline SVG) ---------- */
 function trendChart(readings, unit){
   if(readings.length < 2) return '<div class="empty">Need at least 2 readings to show a trend.</div>';
   const sorted = readings.slice().sort((a,b)=>a.date.localeCompare(b.date));
@@ -353,6 +415,7 @@ function trendChart(readings, unit){
   </svg>`;
 }
 
+/* ---------- Render ---------- */
 function render(){
   const app = document.getElementById('app');
   const tab = state.activeTab;
@@ -386,8 +449,10 @@ function render(){
       <div class="nav-item ${tab==='settings'?'active':''}" onclick="goTab('settings')"><span class="ic">&#9881;</span>Settings</div>
     </div>
     ${modal ? renderModal() : ''}
+    ${sheet ? renderSheet() : ''}
   `;
 
+  // wire up field listeners that need direct binding (member overview inline fields)
   const bloodInput = document.getElementById('blood-input');
   const dobInput = document.getElementById('dob-input');
   const emInput = document.getElementById('em-input');
@@ -445,14 +510,20 @@ function renderMember(tab){
   if(tab === 'timeline'){
     return `
       <div class="panel">
-        <h2>Medical timeline <span class="add-mini" onclick="openAddModal()">+ Add</span></h2>
+        <h2>Medical timeline <span style="font-weight:400;text-transform:none;color:var(--ink-faint);font-size:11px;">most recent first</span><span class="add-mini" onclick="openAddModal()">+ Add</span></h2>
         <div class="timeline">
           ${tl.length ? tl.map(t=>`
             <div class="tl-entry ${t.type}">
-              <div class="tl-date">${t.date}</div>
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div class="tl-date">${t.date}</div>
+                <div style="display:flex;gap:8px;">
+                  <button class="del" onclick="openEditTimeline('${m.id}','${t.id}')">edit</button>
+                  <button class="del" onclick="delTimeline('${m.id}','${t.id}')">remove</button>
+                </div>
+              </div>
               <span class="tl-tag ${t.type}">${t.type}</span>
               <span class="tl-title">${t.title}</span>
-              ${t.type==='visit' ? `<div class="tl-note">${t.doctor?('Dr. '+t.doctor.replace(/^Dr\\.?\\s*/,'')+' — '):''}${t.diagnosis||''}${t.followup?' · next follow-up '+t.followup:''}</div>` : ''}
+              ${t.type==='visit' ? `<div class="tl-note">${t.doctor?('Dr. '+t.doctor.replace(/^Dr\.?\s*/,'')+' — '):''}${t.diagnosis||''}${t.followup?' · next follow-up '+t.followup:''}</div>` : ''}
               ${t.type==='reading' ? `<div class="tl-note">${t.value} ${t.unit||''}</div>` : ''}
               ${(t.type!=='visit' && t.type!=='reading' && t.note) ? `<div class="tl-note">${t.note}</div>` : ''}
             </div>
@@ -468,12 +539,13 @@ function renderMember(tab){
     `;
   }
 
+  // overview tab
   return `
     <div class="stat-row">
-      <div class="stat-card"><div class="n">${meds.length}</div><div class="l">Active medications</div></div>
-      <div class="stat-card"><div class="n">${tl.filter(t=>t.type==='condition').length}</div><div class="l">Known conditions</div></div>
-      <div class="stat-card"><div class="n">${allergies.length}</div><div class="l">Allergies</div></div>
-      <div class="stat-card"><div class="n">${(tl.filter(t=>t.type==='visit')[0]||{}).date || '—'}</div><div class="l">Last doctor visit</div></div>
+      <div class="stat-card" onclick="openSheet('meds')"><div class="n">${meds.length}</div><div class="l">Active medications</div></div>
+      <div class="stat-card" onclick="openSheet('conditions')"><div class="n">${tl.filter(t=>t.type==='condition').length}</div><div class="l">Known conditions</div></div>
+      <div class="stat-card" onclick="openSheet('allergies')"><div class="n">${allergies.length}</div><div class="l">Allergies</div></div>
+      <div class="stat-card" onclick="openSheet('visits')"><div class="n">${(tl.filter(t=>t.type==='visit')[0]||{}).date || '—'}</div><div class="l">Last doctor visit</div></div>
     </div>
 
     <div class="panel emergency">
@@ -494,7 +566,10 @@ function renderMember(tab){
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
             <span class="pill ${med.status==='review'?'review':'active'}">${med.status==='review'?'Review needed':'Active'}</span>
-            <button class="del" onclick="delMed('${m.id}','${med.id}')">remove</button>
+            <div style="display:flex;gap:8px;">
+              <button class="del" onclick="openEditMed('${m.id}','${med.id}')">edit</button>
+              <button class="del" onclick="delMed('${m.id}','${med.id}')">remove</button>
+            </div>
           </div>
         </div>
       `).join('') : '<div class="empty">No medications recorded.</div>'}
@@ -540,6 +615,15 @@ function renderSettings(){
 
 function renderModal(){
   const cat = modal.category;
+  const isEdit = !!modal.editId;
+  const m = activeMember();
+  let existing = null;
+  if(isEdit){
+    if(modal.editType === 'med') existing = (state.meds[m.id]||[]).find(x=>x.id===modal.editId);
+    else existing = (state.timeline[m.id]||[]).find(x=>x.id===modal.editId);
+  }
+  const v = (val)=> val===undefined||val===null ? '' : val;
+
   const cats = [
     {id:'medication', ic:'&#128138;', label:'Medication'},
     {id:'condition', ic:'&#128203;', label:'Condition'},
@@ -550,46 +634,101 @@ function renderModal(){
   let fields = '';
   if(cat === 'medication'){
     fields = `
-      <div class="field"><label>Medicine name</label><input id="f-name" placeholder="e.g. Lisinopril"></div>
-      <div class="field"><label>Dose</label><input id="f-dose" placeholder="e.g. 10mg, once daily"></div>
-      <div class="field"><label>Status</label><select id="f-status"><option value="active">Active</option><option value="review">Review needed</option></select></div>
-      <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Dosage instructions, doctor's advice…"></textarea></div>
+      <div class="field"><label>Medicine name</label><input id="f-name" placeholder="e.g. Lisinopril" value="${v(existing?.name)}"></div>
+      <div class="field"><label>Dose</label><input id="f-dose" placeholder="e.g. 10mg, once daily" value="${v(existing?.dose)}"></div>
+      <div class="field"><label>Status</label><select id="f-status">
+        <option value="active" ${existing?.status!=='review'?'selected':''}>Active</option>
+        <option value="review" ${existing?.status==='review'?'selected':''}>Review needed</option>
+      </select></div>
+      <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Dosage instructions, doctor's advice…">${v(existing?.notes)}</textarea></div>
     `;
   } else if(cat === 'visit'){
     fields = `
-      <div class="field"><label>Visit title</label><input id="f-title" placeholder="e.g. Cardiology follow-up"></div>
-      <div class="field"><label>Date</label><input id="f-date" type="date"></div>
-      <div class="field"><label>Doctor</label><input id="f-doctor" placeholder="e.g. Dr. Nair"></div>
-      <div class="field"><label>Diagnosis / notes</label><textarea id="f-diagnosis" placeholder="What did the doctor say?"></textarea></div>
-      <div class="field"><label>Next follow-up</label><input id="f-followup" type="date"></div>
+      <div class="field"><label>Visit title</label><input id="f-title" placeholder="e.g. Cardiology follow-up" value="${v(existing?.title)}"></div>
+      <div class="field"><label>Date</label><input id="f-date" type="date" value="${v(existing?.date)}"></div>
+      <div class="field"><label>Doctor</label><input id="f-doctor" placeholder="e.g. Dr. Nair" value="${v(existing?.doctor)}"></div>
+      <div class="field"><label>Diagnosis / notes</label><textarea id="f-diagnosis" placeholder="What did the doctor say?">${v(existing?.diagnosis)}</textarea></div>
+      <div class="field"><label>Next follow-up</label><input id="f-followup" type="date" value="${v(existing?.followup)}"></div>
     `;
   } else if(cat === 'reading'){
     fields = `
-      <div class="field"><label>What are you logging?</label><select id="f-metric"><option value="Blood Sugar">Blood Sugar</option><option value="Blood Pressure">Blood Pressure</option></select></div>
-      <div class="field"><label>Value</label><input id="f-value" type="number" placeholder="e.g. 118"></div>
-      <div class="field"><label>Date</label><input id="f-date" type="date"></div>
+      <div class="field"><label>What are you logging?</label><select id="f-metric">
+        <option value="Blood Sugar" ${existing?.metric==='Blood Sugar'?'selected':''}>Blood Sugar</option>
+        <option value="Blood Pressure" ${existing?.metric==='Blood Pressure'?'selected':''}>Blood Pressure</option>
+      </select></div>
+      <div class="field"><label>Value</label><input id="f-value" type="number" placeholder="e.g. 118" value="${v(existing?.value)}"></div>
+      <div class="field"><label>Date</label><input id="f-date" type="date" value="${v(existing?.date)}"></div>
     `;
   } else {
     fields = `
-      <div class="field"><label>Title</label><input id="f-title" placeholder="${cat==='allergy'?'e.g. Penicillin':'e.g. Type 2 diabetes'}"></div>
-      <div class="field"><label>Date</label><input id="f-date" type="date"></div>
-      <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Additional details…"></textarea></div>
+      <div class="field"><label>Title</label><input id="f-title" placeholder="${cat==='allergy'?'e.g. Penicillin':'e.g. Type 2 diabetes'}" value="${v(existing?.title)}"></div>
+      <div class="field"><label>Date</label><input id="f-date" type="date" value="${v(existing?.date)}"></div>
+      <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Additional details…">${v(existing?.note)}</textarea></div>
     `;
   }
   return `
     <div class="modal-bg" onclick="if(event.target===this) closeModal()">
       <div class="modal">
-        <div class="modal-head"><h2>Add new record</h2><button class="close" onclick="closeModal()">&times;</button></div>
-        <div class="cat-grid">
+        <div class="modal-head"><h2>${isEdit ? 'Edit record' : 'Add new record'}</h2><button class="close" onclick="closeModal()">&times;</button></div>
+        <div class="cat-grid" style="${isEdit ? 'opacity:0.5;pointer-events:none;' : ''}">
           ${cats.map(c=>`<div class="cat-card ${cat===c.id?'sel':''}" onclick="pickCategory('${c.id}')"><span class="ic">${c.ic}</span>${c.label}</div>`).join('')}
         </div>
         <form onsubmit="submitModal(event)">
           ${fields}
           <div class="modal-actions">
             <button type="button" class="btn ghost" onclick="closeModal()">Cancel</button>
-            <button type="submit" class="btn primary">Save record</button>
+            <button type="submit" class="btn primary">${isEdit ? 'Save changes' : 'Save record'}</button>
           </div>
         </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderSheet(){
+  const m = activeMember();
+  const meds = medsFor(m.id);
+  const tl = timelineFor(m.id);
+  let title = '', rows = '';
+
+  if(sheet === 'meds'){
+    title = 'Active medications';
+    rows = meds.length ? meds.map(med => `
+      <div class="sheet-row">
+        <div>
+          <div class="stitle">${med.name}</div>
+          <div class="snote">${med.dose||''}${med.notes?' · '+med.notes:''}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button class="del" onclick="sheetEditMed('${m.id}','${med.id}')">edit</button>
+        </div>
+      </div>
+    `).join('') : '<div class="empty">No medications recorded.</div>';
+  } else {
+    const typeMap = { conditions:'condition', allergies:'allergy', visits:'visit' };
+    const type = typeMap[sheet];
+    const items = tl.filter(t => t.type === type);
+    title = sheet === 'conditions' ? 'Known conditions' : sheet === 'allergies' ? 'Allergies' : 'Doctor visits';
+    rows = items.length ? items.map(t => `
+      <div class="sheet-row">
+        <div>
+          <div class="st">${t.date}</div>
+          <div class="stitle">${t.title}</div>
+          ${t.type==='visit' ? `<div class="snote">${t.doctor?('Dr. '+t.doctor.replace(/^Dr\.?\s*/,'')+' — '):''}${t.diagnosis||''}${t.followup?' · next follow-up '+t.followup:''}</div>` : ''}
+          ${(t.type!=='visit' && t.note) ? `<div class="snote">${t.note}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button class="del" onclick="sheetEditTimeline('${m.id}','${t.id}')">edit</button>
+        </div>
+      </div>
+    `).join('') : `<div class="empty">None recorded.</div>`;
+  }
+
+  return `
+    <div class="modal-bg" onclick="if(event.target===this) closeSheet()">
+      <div class="modal">
+        <div class="modal-head"><h2>${title}</h2><button class="close" onclick="closeSheet()">&times;</button></div>
+        ${rows}
       </div>
     </div>
   `;
