@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Vault — family health records (demo)</title>
+<style>
+  :root{
+    --bg:#F4F5F7; --surface:#FFFFFF; --surface-2:#F0F1F4;
+    --ink:#12182B; --ink-soft:#525A70; --ink-faint:#9298A8;
+    --line:#E4E6EC; --line-strong:#D2D5DE;
+    --navy:#182A4D; --navy-2:#22385F;
+    --amber:#C9791E; --amber-bg:#FBEBD6;
+    --sage:#3C7A5C; --sage-bg:#E1F0E7;
+    --rose:#B0473E; --rose-bg:#F8E4E1;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .app{max-width:460px;margin:0 auto;min-height:100vh;background:var(--bg);
+    display:flex;flex-direction:column;position:relative;padding-bottom:64px;}
+
+  .demo-banner{background:var(--navy);color:#F0C98E;font-size:11.5px;font-weight:700;
+    text-align:center;padding:7px;letter-spacing:0.02em;}
+
+  .topbar{background:var(--surface);border-bottom:1px solid var(--line);
+    padding:14px 18px;display:flex;justify-content:space-between;align-items:center;}
+  .topbar h1{font-size:17px;margin:0;font-weight:700;letter-spacing:-0.01em;}
+  .topbar .sub{font-size:11.5px;color:var(--ink-faint);margin-top:1px;}
+  .icon-btn{border:none;background:var(--surface-2);width:32px;height:32px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--ink-soft);}
+
+  .content{flex:1;padding:16px 16px 20px;overflow-y:auto;}
+
+  /* Family list */
+  .search{background:var(--surface);border:1px solid var(--line);border-radius:24px;
+    padding:10px 16px;font-size:13.5px;color:var(--ink-faint);margin-bottom:14px;}
+  .fam-count{font-size:13px;font-weight:700;color:var(--ink-soft);margin:4px 0 10px;}
+  .fam-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:10px;cursor:pointer;}
+  .avatar{width:42px;height:42px;border-radius:50%;background:var(--surface-2);color:var(--ink-soft);
+    font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .fam-card.active .avatar{background:var(--amber);color:#2A1B08;}
+  .fam-info{flex:1;min-width:0;}
+  .fam-info .nm{font-size:14.5px;font-weight:700;}
+  .fam-info .nm .role{font-weight:400;color:var(--ink-faint);font-size:12.5px;}
+  .fam-info .stats{font-size:12px;color:var(--ink-faint);margin-top:2px;}
+  .chev{color:var(--line-strong);font-size:16px;}
+  .add-fam{border:1.5px dashed var(--line-strong);border-radius:var(--radius);padding:14px;
+    text-align:center;color:var(--ink-faint);font-size:13px;cursor:pointer;margin-top:4px;}
+  .trust-note{text-align:center;color:var(--ink-faint);font-size:11.5px;margin-top:22px;line-height:1.6;padding:0 20px;}
+
+  /* Member overview */
+  .stat-row{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;}
+  .stat-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;cursor:pointer;}
+  .stat-card:active{background:var(--surface-2);}
+  .sheet-row{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);gap:8px;}
+  .sheet-row:last-child{border-bottom:none;}
+  .sheet-row .st{font-size:10.5px;color:var(--ink-faint);font-weight:700;}
+  .sheet-row .stitle{font-size:13.5px;font-weight:700;}
+  .sheet-row .snote{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  .stat-card .n{font-size:20px;font-weight:800;}
+  .stat-card .l{font-size:11px;color:var(--ink-faint);margin-top:1px;}
+
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;margin-bottom:14px;}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-soft);
+    margin:0 0 10px;font-weight:800;display:flex;justify-content:space-between;align-items:center;}
+  .panel h2 .add-mini{font-size:11px;color:var(--navy);font-weight:700;cursor:pointer;text-transform:none;}
+  .empty{font-size:12.5px;color:var(--ink-faint);font-style:italic;}
+
+  .emergency{background:var(--rose-bg);border:1px solid #E3B4AE;}
+  .emergency h2{color:var(--rose);}
+  .em-row{font-size:12.5px;margin-bottom:5px;}
+  .em-row b{color:var(--rose);}
+
+  .med-row{display:flex;justify-content:space-between;align-items:flex-start;
+    padding:9px 0;border-bottom:1px solid var(--line);gap:8px;}
+  .med-row:last-child{border-bottom:none;}
+  .med-row .name{font-size:13.5px;font-weight:700;}
+  .med-row .dose{font-size:11.5px;color:var(--ink-soft);margin-top:1px;}
+  .pill{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap;}
+  .pill.active{background:var(--sage-bg);color:var(--sage);}
+  .pill.review{background:var(--amber-bg);color:#8A4E0C;}
+  .del{border:none;background:none;color:var(--ink-faint);font-size:11px;cursor:pointer;padding:0;}
+  .del:hover{color:var(--rose);}
+
+  .timeline{padding-left:2px;}
+  .tl-entry{position:relative;padding:0 0 14px 18px;border-left:2px solid var(--line);}
+  .tl-entry:last-child{border-color:transparent;padding-bottom:0;}
+  .tl-entry::before{content:'';position:absolute;left:-6px;top:1px;width:10px;height:10px;border-radius:50%;
+    background:var(--ink-faint);border:2px solid var(--surface);}
+  .tl-entry.condition::before{background:var(--rose);}
+  .tl-entry.allergy::before{background:var(--amber);}
+  .tl-entry.visit::before{background:var(--sage);}
+  .tl-entry.reading::before{background:var(--navy-2);}
+  .tl-date{font-size:10.5px;color:var(--ink-faint);font-weight:700;}
+  .tl-title{font-size:13.5px;font-weight:700;}
+  .tl-note{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+  .tl-tag{display:inline-block;font-size:9.5px;text-transform:uppercase;font-weight:800;
+    padding:2px 6px;border-radius:4px;margin-right:5px;}
+  .tl-tag.condition{background:var(--rose-bg);color:var(--rose);}
+  .tl-tag.allergy{background:var(--amber-bg);color:#8A4E0C;}
+  .tl-tag.visit{background:var(--sage-bg);color:var(--sage);}
+  .tl-tag.reading{background:#E4E9F5;color:var(--navy-2);}
+
+  .chart-wrap{margin-top:6px;}
+  .chart-label{font-size:11.5px;color:var(--ink-soft);margin-bottom:4px;font-weight:600;}
+
+  .action-row{display:flex;gap:8px;margin-top:4px;}
+  .btn{font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 12px;border-radius:8px;
+    border:none;cursor:pointer;flex:1;text-align:center;}
+  .btn.primary{background:var(--navy);color:#fff;}
+  .btn.ghost{background:var(--surface-2);color:var(--ink-soft);}
+  .btn.ask{background:var(--amber);color:#2A1B08;}
+
+  /* Bottom nav */
+  .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:460px;
+    background:var(--surface);border-top:1px solid var(--line);display:flex;z-index:10;}
+  .nav-item{flex:1;text-align:center;padding:9px 4px 10px;font-size:10.5px;color:var(--ink-faint);
+    cursor:pointer;font-weight:600;}
+  .nav-item .ic{font-size:17px;display:block;margin-bottom:2px;}
+  .nav-item.active{color:var(--navy);}
+
+  /* Modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(18,24,43,0.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;}
+  .modal{background:var(--surface);width:100%;max-width:400px;margin:0 auto;border-radius:16px;
+    padding:20px 20px 22px;max-height:82vh;overflow-y:auto;box-shadow:0 20px 60px rgba(18,24,43,0.35);}
+  .modal h2{font-size:15px;margin:0 0 14px;font-weight:800;}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .modal-head .close{border:none;background:var(--surface-2);width:28px;height:28px;border-radius:50%;
+    color:var(--ink-soft);cursor:pointer;font-size:13px;}
+  .cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
+  .cat-card{border:1.5px solid var(--line);border-radius:10px;padding:14px 8px;text-align:center;
+    font-size:12px;font-weight:700;color:var(--ink-soft);cursor:pointer;}
+  .cat-card.sel{border-color:var(--navy);color:var(--navy);background:#EEF1F7;}
+  .cat-card .ic{font-size:20px;display:block;margin-bottom:6px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);margin-bottom:4px;}
+  .field input, .field select, .field textarea{
+    width:100%;font-family:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line-strong);
+    border-radius:8px;background:var(--surface-2);color:var(--ink);}
+  .field textarea{resize:vertical;min-height:56px;}
+  .modal-actions{display:flex;gap:8px;margin-top:6px;}
+
+  /* Assistant */
+  .chat-log{display:flex;flex-direction:column;gap:10px;margin-bottom:12px;}
+  .msg{max-width:85%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.55;white-space:pre-wrap;}
+  .msg.user{align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:3px;}
+  .msg.ai{align-self:flex-start;background:var(--surface-2);color:var(--ink);border-bottom-left-radius:3px;}
+  .suggest{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
+  .suggest button{font-size:11.5px;background:var(--surface-2);color:var(--ink-soft);border:1px solid var(--line);
+    padding:6px 11px;border-radius:20px;cursor:pointer;font-family:inherit;}
+  .ask-bar{position:sticky;bottom:0;background:var(--bg);display:flex;gap:8px;padding-top:8px;}
+  .ask-bar textarea{flex:1;font-family:inherit;font-size:13px;padding:9px 12px;border:1px solid var(--line-strong);
+    border-radius:20px;background:var(--surface);resize:none;min-height:38px;max-height:80px;}
+  .ask-send{background:var(--navy);color:#fff;border:none;border-radius:50%;width:38px;height:38px;
+    flex-shrink:0;cursor:pointer;font-size:15px;}
+  .loading-dots{color:var(--ink-faint);font-style:italic;font-size:12.5px;padding:4px 0;}
+
+  .settings-item{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;margin-bottom:10px;font-size:13.5px;}
+  .settings-item b{display:block;margin-bottom:4px;}
+  .settings-item span{color:var(--ink-soft);font-size:12px;line-height:1.5;}
+
+  @media print{
+    .bottom-nav, .demo-banner, .topbar .icon-btn{display:none;}
+    body{background:#fff;}
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+/* ---------- Seed data: fictional Sharma family ---------- */
+function seedData(){
+  return {
+    members: [
+      { id:'m1', name:'Meera Sharma', role:'You', dob:'12 Mar 1994', blood:'B+', emergencyContact:'Rohan Sharma · +91 98xxxxxx01' },
+      { id:'m2', name:'Rajesh Sharma', role:'Father', dob:'04 Jul 1962', blood:'O+', emergencyContact:'Meera Sharma · +91 98xxxxxx02' },
+      { id:'m3', name:'Kavita Sharma', role:'Mother', dob:'19 Sep 1965', blood:'A+', emergencyContact:'Meera Sharma · +91 98xxxxxx02' },
+      { id:'m4', name:'Aarav Sharma', role:'Brother', dob:'22 Jan 1998', blood:'O+', emergencyContact:'Rajesh Sharma · +91 98xxxxxx03' },
+    ],
+    meds: {
+      m2:[{id:'d1',name:'Metformin',dose:'500mg, twice daily',status:'review',notes:'With meals'},
+          {id:'d2',name:'Amlodipine',dose:'5mg, once daily',status:'active',notes:'Morning, for blood pressure'}],
+      m3:[{id:'d3',name:'Levothyroxine',dose:'50mcg, once daily',status:'active',notes:'Empty stomach'}],
+      m1:[],
+      m4:[{id:'d4',name:'Cetirizine',dose:'10mg, as needed',status:'active',notes:'For seasonal allergies'}],
+    },
+    timeline: {
+      m2:[
+        {id:'t1',date:'2024-02-10',type:'condition',title:'Type 2 diabetes diagnosed',note:'Routine bloodwork flagged elevated HbA1c'},
+        {id:'t2',date:'2024-02-10',type:'condition',title:'Hypertension diagnosed',note:'BP 148/94 at diagnosis'},
+        {id:'t3',date:'2025-08-03',type:'visit',title:'Cardiology follow-up',note:'Dr. Nair — BP stable',doctor:'Dr. Nair',diagnosis:'Hypertension, stable',followup:'2026-02-03'},
+        {id:'t4',date:'2026-05-14',type:'visit',title:'Annual check-up',note:'HbA1c improved to 6.8%',doctor:'Dr. Iyer',diagnosis:'Type 2 diabetes, improving',followup:'2026-11-14'},
+        {id:'t5',date:'2026-01-10',type:'reading',title:'Fasting blood sugar',note:'',metric:'Blood Sugar',value:132,unit:'mg/dL'},
+        {id:'t6',date:'2026-03-10',type:'reading',title:'Fasting blood sugar',note:'',metric:'Blood Sugar',value:121,unit:'mg/dL'},
+        {id:'t7',date:'2026-05-10',type:'reading',title:'Fasting blood sugar',note:'',metric:'Blood Sugar',value:114,unit:'mg/dL'},
+      ],
+      m3:[
+        {id:'t8',date:'2021-11-02',type:'condition',title:'Hypothyroidism diagnosed',note:''},
+        {id:'t9',date:'2023-06-15',type:'allergy',title:'Penicillin',note:'Rash and swelling on prior course'},
+        {id:'t10',date:'2026-01-20',type:'visit',title:'Endocrinology review',note:'TSH within normal range',doctor:'Dr. Rao',diagnosis:'Hypothyroidism, controlled',followup:'2026-07-20'},
+      ],
+      m1:[{id:'t11',date:'2025-03-01',type:'allergy',title:'Shellfish',note:'Mild reaction, confirmed by allergist'}],
+      m4:[{id:'t12',date:'2022-04-11',type:'allergy',title:'Pollen',note:'Seasonal, worse in spring'}],
+    },
+    activeMember:'m2', activeTab:'family', chats:{}
+  };
+}
+
+let state = null;
+let loading = false;
+let modal = null; // {type:'add', category:'medication'|'condition'|'allergy'|'visit'|'reading'}
+let sheet = null; // 'meds' | 'conditions' | 'allergies' | 'visits' | null
+
+function openSheet(type){ sheet = type; render(); }
+function closeSheet(){ sheet = null; render(); }
+function sheetEditMed(mid,id){ sheet = null; openEditMed(mid,id); }
+function sheetEditTimeline(mid,id){ sheet = null; openEditTimeline(mid,id); }
+function sheetDeleteMed(mid,id){
+  if(!confirm('Delete this medication?')) return;
+  state.meds[mid] = (state.meds[mid]||[]).filter(x=>x.id!==id);
+  save(); render();
+}
+function sheetDeleteTimeline(mid,id){
+  if(!confirm('Delete this record?')) return;
+  state.timeline[mid] = (state.timeline[mid]||[]).filter(x=>x.id!==id);
+  save(); render();
+}
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+
+/* Session-only persistence: fresh Sharma data every new tab/visit,
+   but edits stick while you navigate around within the same tab. */
+function loadState(){
+  try{
+    const raw = sessionStorage.getItem('vault-demo-state');
+    if(raw){ state = JSON.parse(raw); return; }
+  }catch(e){}
+  state = seedData();
+  save();
+}
+function save(){
+  try{ sessionStorage.setItem('vault-demo-state', JSON.stringify(state)); }catch(e){}
+}
+function resetAll(){
+  if(!confirm('Reset the whole demo back to the Sharma family baseline?')) return;
+  state = seedData(); save(); render();
+}
+
+function activeMember(){ return state.members.find(m=>m.id===state.activeMember) || state.members[0]; }
+function medsFor(id){ return state.meds[id]||[]; }
+function timelineFor(id){ return (state.timeline[id]||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)); }
+function initials(name){ return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+
+function goTab(tab){ state.activeTab = tab; save(); render(); }
+function selectMember(id){ state.activeMember = id; state.activeTab = 'overview'; save(); render(); }
+
+function addMember(){
+  const name = prompt("Family member's name:");
+  if(!name) return;
+  const id = uid();
+  state.members.push({id,name,role:'',dob:'',blood:'',emergencyContact:''});
+  state.meds[id]=[]; state.timeline[id]=[];
+  state.activeMember = id; state.activeTab='overview';
+  save(); render();
+}
+
+function openAddModal(){ modal = {category:'medication', editId:null, editType:null}; render(); }
+function openEditMed(memberId, medId){
+  const med = (state.meds[memberId]||[]).find(x=>x.id===medId);
+  if(!med) return;
+  modal = {category:'medication', editId:medId, editType:'med'};
+  render();
+}
+function openEditTimeline(memberId, entryId){
+  const entry = (state.timeline[memberId]||[]).find(x=>x.id===entryId);
+  if(!entry) return;
+  modal = {category:entry.type, editId:entryId, editType:'timeline'};
+  render();
+}
+function closeModal(){ modal = null; render(); }
+function pickCategory(c){ if(modal.editId) return; modal.category = c; render(); }
+
+function submitModal(e){
+  e.preventDefault();
+  const m = activeMember();
+  const cat = modal.category;
+
+  if(cat === 'medication'){
+    const name = document.getElementById('f-name').value.trim();
+    const dose = document.getElementById('f-dose').value.trim();
+    const status = document.getElementById('f-status').value;
+    const notes = document.getElementById('f-notes').value.trim();
+    if(!name) return;
+    if(!state.meds[m.id]) state.meds[m.id]=[];
+    if(modal.editId){
+      const med = state.meds[m.id].find(x=>x.id===modal.editId);
+      if(med){ med.name=name; med.dose=dose; med.status=status; med.notes=notes; }
+    } else {
+      state.meds[m.id].push({id:uid(),name,dose,status,notes});
+    }
+  } else if(cat === 'reading'){
+    const metric = document.getElementById('f-metric').value;
+    const value = parseFloat(document.getElementById('f-value').value);
+    const date = document.getElementById('f-date').value || new Date().toISOString().slice(0,10);
+    if(!value) return;
+    if(!state.timeline[m.id]) state.timeline[m.id]=[];
+    if(modal.editId){
+      const entry = state.timeline[m.id].find(x=>x.id===modal.editId);
+      if(entry){ entry.date=date; entry.metric=metric; entry.title=metric; entry.value=value; entry.unit= metric==='Blood Sugar'?'mg/dL':'mmHg'; }
+    } else {
+      state.timeline[m.id].push({id:uid(),date,type:'reading',title:metric,metric,value,unit: metric==='Blood Sugar'?'mg/dL':'mmHg',note:''});
+    }
+  } else if(cat === 'visit'){
+    const title = document.getElementById('f-title').value.trim();
+    const date = document.getElementById('f-date').value || new Date().toISOString().slice(0,10);
+    const doctor = document.getElementById('f-doctor').value.trim();
+    const diagnosis = document.getElementById('f-diagnosis').value.trim();
+    const followup = document.getElementById('f-followup').value;
+    if(!title) return;
+    if(!state.timeline[m.id]) state.timeline[m.id]=[];
+    if(modal.editId){
+      const entry = state.timeline[m.id].find(x=>x.id===modal.editId);
+      if(entry){ entry.title=title; entry.date=date; entry.doctor=doctor; entry.diagnosis=diagnosis; entry.followup=followup; entry.note=diagnosis; }
+    } else {
+      state.timeline[m.id].push({id:uid(),date,type:'visit',title,doctor,diagnosis,followup,note:diagnosis});
+    }
+  } else {
+    const title = document.getElementById('f-title').value.trim();
+    const date = document.getElementById('f-date').value || new Date().toISOString().slice(0,10);
+    const note = document.getElementById('f-notes').value.trim();
+    if(!title) return;
+    if(!state.timeline[m.id]) state.timeline[m.id]=[];
+    if(modal.editId){
+      const entry = state.timeline[m.id].find(x=>x.id===modal.editId);
+      if(entry){ entry.title=title; entry.date=date; entry.note=note; }
+    } else {
+      state.timeline[m.id].push({id:uid(),date,type:cat,title,note});
+    }
+  }
+  save(); modal=null; render();
+}
+
+function delMed(memberId,id){
+  if(!confirm('Remove this medication?')) return;
+  state.meds[memberId]=(state.meds[memberId]||[]).filter(x=>x.id!==id); save(); render();
+}
+function delTimeline(memberId,id){
+  if(!confirm('Remove this timeline entry?')) return;
+  state.timeline[memberId]=(state.timeline[memberId]||[]).filter(x=>x.id!==id); save(); render();
+}
+function updateField(memberId,field,value){ const m=state.members.find(x=>x.id===memberId); if(m) m[field]=value; save(); }
+
+/* ---------- Assistant ---------- */
+function compileRecordText(memberId){
+  const m = state.members.find(x=>x.id===memberId);
+  const meds = medsFor(memberId); const tl = timelineFor(memberId);
+  let text = `Patient: ${m.name} (${m.role||'family member'})\n`;
+  if(m.dob) text += `DOB: ${m.dob}\n`;
+  if(m.blood) text += `Blood group: ${m.blood}\n`;
+  text += `\nCurrent medications:\n` + (meds.length ? meds.map(x=>`- ${x.name}${x.dose?' ('+x.dose+')':''}${x.notes?' — '+x.notes:''}`).join('\n') : '- none recorded');
+  text += `\n\nTimeline:\n` + (tl.length ? tl.map(x=>{
+    if(x.type==='visit') return `- [${x.date}] Doctor visit with ${x.doctor||'unknown'}: ${x.diagnosis||x.note||''}${x.followup?' (follow-up '+x.followup+')':''}`;
+    if(x.type==='reading') return `- [${x.date}] ${x.metric}: ${x.value} ${x.unit||''}`;
+    return `- [${x.date}] (${x.type}) ${x.title}${x.note?': '+x.note:''}`;
+  }).join('\n') : '- none recorded');
+  return text;
+}
+
+function chatFor(memberId){ if(!state.chats[memberId]) state.chats[memberId]=[]; return state.chats[memberId]; }
+function clearChat(memberId){ state.chats[memberId]=[]; save(); render(); }
+function askSuggested(text){ document.getElementById('ai-question').value = text; askAI(); }
+
+async function askAI(){
+  const box = document.getElementById('ai-question');
+  const q = box.value.trim();
+  if(!q) return;
+  const m = activeMember();
+  const chat = chatFor(m.id);
+  chat.push({role:'user', text:q});
+  box.value = '';
+  loading = true; save(); render();
+  try{
+    const response = await fetch('/api/ask', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ record: compileRecordText(m.id), question: q })
+    });
+    const data = await response.json();
+    chat.push({role:'ai', text: data.answer || data.error || 'No answer returned.'});
+  }catch(e){
+    chat.push({role:'ai', text:'Could not reach the AI service: ' + e.message});
+  }
+  loading = false; save(); render();
+}
+
+/* ---------- Export ---------- */
+function exportSummary(){ window.print(); }
+
+/* ---------- Trend chart (simple inline SVG) ---------- */
+function trendChart(readings, unit){
+  if(readings.length < 2) return '<div class="empty">Need at least 2 readings to show a trend.</div>';
+  const sorted = readings.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const vals = sorted.map(r=>r.value);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = (max-min)||1;
+  const w=280, h=90, pad=10;
+  const pts = sorted.map((r,i)=>{
+    const x = pad + (i/(sorted.length-1))*(w-2*pad);
+    const y = h-pad - ((r.value-min)/range)*(h-2*pad);
+    return [x,y];
+  });
+  const path = pts.map((p,i)=> (i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const dots = pts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#182A4D"/>`).join('');
+  const labels = `<text x="${pts[0][0]}" y="${h-1}" font-size="9" fill="#9298A8">${sorted[0].value}${unit?' '+unit:''}</text>
+    <text x="${pts[pts.length-1][0]-18}" y="${h-1}" font-size="9" fill="#9298A8">${sorted[sorted.length-1].value}${unit?' '+unit:''}</text>`;
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
+    <path d="${path}" fill="none" stroke="#182A4D" stroke-width="2"/>
+    ${dots}${labels}
+  </svg>`;
+}
+
+/* ---------- Render ---------- */
+function render(){
+  const app = document.getElementById('app');
+  const tab = state.activeTab;
+  let body = '';
+
+  if(tab === 'family'){
+    body = renderFamily();
+  } else if(tab === 'overview' || tab === 'timeline'){
+    body = renderMember(tab);
+  } else if(tab === 'assistant'){
+    body = renderAssistant();
+  } else if(tab === 'settings'){
+    body = renderSettings();
+  }
+
+  app.innerHTML = `
+    <div class="demo-banner">DEMO MODE — Sharma family sample data · resets on your next visit</div>
+    <div class="topbar">
+      <div>
+        <h1>${topTitle(tab)}</h1>
+        <div class="sub">${topSub(tab)}</div>
+      </div>
+      <button class="icon-btn" onclick="resetAll()" title="Reset demo">&#8635;</button>
+    </div>
+    <div class="content">${body}</div>
+    <div class="bottom-nav">
+      <div class="nav-item ${tab==='family'?'active':''}" onclick="goTab('family')"><span class="ic">&#128193;</span>Family</div>
+      <div class="nav-item ${tab==='overview'?'active':''}" onclick="goTab('overview')"><span class="ic">&#128203;</span>Records</div>
+      <div class="nav-item ${tab==='timeline'?'active':''}" onclick="goTab('timeline')"><span class="ic">&#128336;</span>Timeline</div>
+      <div class="nav-item ${tab==='assistant'?'active':''}" onclick="goTab('assistant')"><span class="ic">&#128172;</span>Assistant</div>
+      <div class="nav-item ${tab==='settings'?'active':''}" onclick="goTab('settings')"><span class="ic">&#9881;</span>Settings</div>
+    </div>
+    ${modal ? renderModal() : ''}
+    ${sheet ? renderSheet() : ''}
+  `;
+
+  // wire up field listeners that need direct binding (member overview inline fields)
+  const bloodInput = document.getElementById('blood-input');
+  const dobInput = document.getElementById('dob-input');
+  const emInput = document.getElementById('em-input');
+  if(bloodInput) bloodInput.onchange = e=>updateField(activeMember().id,'blood',e.target.value);
+  if(dobInput) dobInput.onchange = e=>updateField(activeMember().id,'dob',e.target.value);
+  if(emInput) emInput.onchange = e=>updateField(activeMember().id,'emergencyContact',e.target.value);
+
+  const chatLog = document.getElementById('chat-log');
+  if(chatLog) chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function topTitle(tab){
+  if(tab==='family') return 'Vault';
+  if(tab==='settings') return 'Settings';
+  const m = activeMember();
+  if(tab==='assistant') return 'Ask about ' + m.name.split(' ')[0];
+  return m.name;
+}
+function topSub(tab){
+  if(tab==='family') return 'family health records';
+  if(tab==='settings') return 'about this demo';
+  const m = activeMember();
+  if(tab==='assistant') return 'answers only from stored records';
+  return m.role || 'family member';
+}
+
+function renderFamily(){
+  return `
+    <div class="search">&#128269;&nbsp; Search family members…</div>
+    <div class="fam-count">${state.members.length} family members</div>
+    ${state.members.map(m=>{
+      const meds = medsFor(m.id).length, conds = (state.timeline[m.id]||[]).filter(t=>t.type==='condition').length;
+      return `<div class="fam-card ${m.id===state.activeMember?'active':''}" onclick="selectMember('${m.id}')">
+        <div class="avatar">${initials(m.name)}</div>
+        <div class="fam-info">
+          <div class="nm">${m.name} <span class="role">(${m.role||'Member'})</span></div>
+          <div class="stats">${meds} medication${meds!==1?'s':''} · ${conds} condition${conds!==1?'s':''}</div>
+        </div>
+        <div class="chev">&#8250;</div>
+      </div>`;
+    }).join('')}
+    <div class="add-fam" onclick="addMember()">+ Add family member</div>
+    <div class="trust-note">This is a demo — all data shown is fictional and resets automatically when you next open this page.</div>
+  `;
+}
+
+function renderMember(tab){
+  const m = activeMember();
+  const meds = medsFor(m.id);
+  const tl = timelineFor(m.id);
+  const allergies = tl.filter(t=>t.type==='allergy');
+  const readingsByMetric = {};
+  tl.forEach(t=>{ if(t.type==='reading'){ (readingsByMetric[t.metric]=readingsByMetric[t.metric]||[]).push(t); } });
+
+  if(tab === 'timeline'){
+    return `
+      <div class="panel">
+        <h2>Medical timeline <span style="font-weight:400;text-transform:none;color:var(--ink-faint);font-size:11px;">most recent first</span><span class="add-mini" onclick="openAddModal()">+ Add</span></h2>
+        <div class="timeline">
+          ${tl.length ? tl.map(t=>`
+            <div class="tl-entry ${t.type}">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div class="tl-date">${t.date}</div>
+                <div style="display:flex;gap:8px;">
+                  <button class="del" onclick="openEditTimeline('${m.id}','${t.id}')">edit</button>
+                  <button class="del" onclick="delTimeline('${m.id}','${t.id}')">remove</button>
+                </div>
+              </div>
+              <span class="tl-tag ${t.type}">${t.type}</span>
+              <span class="tl-title">${t.title}</span>
+              ${t.type==='visit' ? `<div class="tl-note">${t.doctor?('Dr. '+t.doctor.replace(/^Dr\.?\s*/,'')+' — '):''}${t.diagnosis||''}${t.followup?' · next follow-up '+t.followup:''}</div>` : ''}
+              ${t.type==='reading' ? `<div class="tl-note">${t.value} ${t.unit||''}</div>` : ''}
+              ${(t.type!=='visit' && t.type!=='reading' && t.note) ? `<div class="tl-note">${t.note}</div>` : ''}
+            </div>
+          `).join('') : '<div class="empty">No entries yet.</div>'}
+        </div>
+      </div>
+      ${Object.keys(readingsByMetric).map(metric=>`
+        <div class="panel">
+          <h2>${metric} trend</h2>
+          <div class="chart-wrap">${trendChart(readingsByMetric[metric], readingsByMetric[metric][0].unit)}</div>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  // overview tab
+  return `
+    <div class="stat-row">
+      <div class="stat-card" onclick="openSheet('meds')"><div class="n">${meds.length}</div><div class="l">Active medications</div></div>
+      <div class="stat-card" onclick="openSheet('conditions')"><div class="n">${tl.filter(t=>t.type==='condition').length}</div><div class="l">Known conditions</div></div>
+      <div class="stat-card" onclick="openSheet('allergies')"><div class="n">${allergies.length}</div><div class="l">Allergies</div></div>
+      <div class="stat-card" onclick="openSheet('visits')"><div class="n">${(tl.filter(t=>t.type==='visit')[0]||{}).date || '—'}</div><div class="l">Last doctor visit</div></div>
+    </div>
+
+    <div class="panel emergency">
+      <h2>Emergency card</h2>
+      <div class="field"><input id="blood-input" placeholder="Blood group" value="${m.blood||''}"></div>
+      <div class="field"><input id="dob-input" placeholder="Date of birth" value="${m.dob||''}"></div>
+      <div class="field"><input id="em-input" placeholder="Emergency contact" value="${m.emergencyContact||''}"></div>
+      <div class="em-row"><b>Allergies:</b> ${allergies.map(a=>a.title).join(', ') || 'none recorded'}</div>
+    </div>
+
+    <div class="panel">
+      <h2>Current medications <span class="add-mini" onclick="openAddModal()">+ Add</span></h2>
+      ${meds.length ? meds.map(med=>`
+        <div class="med-row">
+          <div>
+            <div class="name">${med.name}</div>
+            <div class="dose">${med.dose||''}${med.notes?' · '+med.notes:''}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
+            <span class="pill ${med.status==='review'?'review':'active'}">${med.status==='review'?'Review needed':'Active'}</span>
+            <div style="display:flex;gap:8px;">
+              <button class="del" onclick="openEditMed('${m.id}','${med.id}')">edit</button>
+              <button class="del" onclick="delMed('${m.id}','${med.id}')">remove</button>
+            </div>
+          </div>
+        </div>
+      `).join('') : '<div class="empty">No medications recorded.</div>'}
+    </div>
+
+    <div class="action-row">
+      <button class="btn primary" onclick="exportSummary()">Export summary (PDF)</button>
+      <button class="btn ask" onclick="goTab('assistant')">Ask Vault</button>
+    </div>
+  `;
+}
+
+function renderAssistant(){
+  const m = activeMember();
+  const chat = chatFor(m.id);
+  return `
+    <div id="chat-log" class="chat-log" style="max-height:calc(100vh - 280px);overflow-y:auto;">
+      ${chat.length ? chat.map(msg=>`<div class="msg ${msg.role}">${msg.text.replace(/</g,'&lt;')}</div>`).join('')
+        : `<div class="suggest">
+             <button onclick="askSuggested('What medicines does ${m.name.split(' ')[0]} currently take, with doses?')">current meds</button>
+             <button onclick="askSuggested('Summarize ${m.name.split(' ')[0]}\\'s medical history for a doctor.')">summarize history</button>
+             <button onclick="askSuggested('Does ${m.name.split(' ')[0]} have any drug allergies?')">allergies</button>
+           </div>`}
+      ${loading ? '<div class="loading-dots">Reading the records…</div>' : ''}
+    </div>
+    ${chat.length ? `<div style="text-align:right;margin-bottom:6px;"><button class="del" onclick="clearChat('${m.id}')">New question — clear this chat</button></div>` : ''}
+    <div class="ask-bar">
+      <textarea id="ai-question" placeholder="Ask about ${m.name.split(' ')[0]}'s health…" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); askAI();}"></textarea>
+      <button class="ask-send" onclick="askAI()">&#10148;</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--ink-faint);margin-top:8px;text-align:center;">Answers use only the records stored for ${m.name.split(' ')[0]} — nothing is invented.</div>
+  `;
+}
+
+function renderSettings(){
+  return `
+    <div class="settings-item"><b>Demo mode</b><span>This public demo resets to the fictional Sharma family every time you open it fresh. Anything you add stays only while you keep this tab open.</span></div>
+    <div class="settings-item"><b>Your data</b><span>Nothing you type here is sent to or stored on any server other than your own browser session, and the AI questions you ask.</span></div>
+    <div class="settings-item"><b>About Vault</b><span>A concept for organizing a family's medical history in one place, with an AI assistant that can answer a doctor's question instantly from stored records.</span></div>
+    <button class="btn ghost" style="width:100%;margin-top:6px;" onclick="resetAll()">Reset demo to Sharma family baseline</button>
+  `;
+}
+
+function renderModal(){
+  const cat = modal.category;
+  const isEdit = !!modal.editId;
+  const m = activeMember();
+  let existing = null;
+  if(isEdit){
+    if(modal.editType === 'med') existing = (state.meds[m.id]||[]).find(x=>x.id===modal.editId);
+    else existing = (state.timeline[m.id]||[]).find(x=>x.id===modal.editId);
+  }
+  const v = (val)=> val===undefined||val===null ? '' : val;
+
+  const cats = [
+    {id:'medication', ic:'&#128138;', label:'Medication'},
+    {id:'condition', ic:'&#128203;', label:'Condition'},
+    {id:'allergy', ic:'&#9888;', label:'Allergy'},
+    {id:'visit', ic:'&#128204;', label:'Doctor visit'},
+    {id:'reading', ic:'&#128200;', label:'Reading'},
+  ];
+  let fields = '';
+  if(cat === 'medication'){
+    fields = `
+      <div class="field"><label>Medicine name</label><input id="f-name" placeholder="e.g. Lisinopril" value="${v(existing?.name)}"></div>
+      <div class="field"><label>Dose</label><input id="f-dose" placeholder="e.g. 10mg, once daily" value="${v(existing?.dose)}"></div>
+      <div class="field"><label>Status</label><select id="f-status">
+        <option value="active" ${existing?.status!=='review'?'selected':''}>Active</option>
+        <option value="review" ${existing?.status==='review'?'selected':''}>Review needed</option>
+      </select></div>
+      <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Dosage instructions, doctor's advice…">${v(existing?.notes)}</textarea></div>
+    `;
+  } else if(cat === 'visit'){
+    fields = `
+      <div class="field"><label>Visit title</label><input id="f-title" placeholder="e.g. Cardiology follow-up" value="${v(existing?.title)}"></div>
+      <div class="field"><label>Date</label><input id="f-date" type="date" value="${v(existing?.date)}"></div>
+      <div class="field"><label>Doctor</label><input id="f-doctor" placeholder="e.g. Dr. Nair" value="${v(existing?.doctor)}"></div>
+      <div class="field"><label>Diagnosis / notes</label><textarea id="f-diagnosis" placeholder="What did the doctor say?">${v(existing?.diagnosis)}</textarea></div>
+      <div class="field"><label>Next follow-up</label><input id="f-followup" type="date" value="${v(existing?.followup)}"></div>
+    `;
+  } else if(cat === 'reading'){
+    fields = `
+      <div class="field"><label>What are you logging?</label><select id="f-metric">
+        <option value="Blood Sugar" ${existing?.metric==='Blood Sugar'?'selected':''}>Blood Sugar</option>
+        <option value="Blood Pressure" ${existing?.metric==='Blood Pressure'?'selected':''}>Blood Pressure</option>
+      </select></div>
+      <div class="field"><label>Value</label><input id="f-value" type="number" placeholder="e.g. 118" value="${v(existing?.value)}"></div>
+      <div class="field"><label>Date</label><input id="f-date" type="date" value="${v(existing?.date)}"></div>
+    `;
+  } else {
+    fields = `
+      <div class="field"><label>Title</label><input id="f-title" placeholder="${cat==='allergy'?'e.g. Penicillin':'e.g. Type 2 diabetes'}" value="${v(existing?.title)}"></div>
+      <div class="field"><label>Date</label><input id="f-date" type="date" value="${v(existing?.date)}"></div>
+      <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Additional details…">${v(existing?.note)}</textarea></div>
+    `;
+  }
+  return `
+    <div class="modal-bg" onclick="if(event.target===this) closeModal()">
+      <div class="modal">
+        <div class="modal-head"><h2>${isEdit ? 'Edit record' : 'Add new record'}</h2><button class="close" onclick="closeModal()">&times;</button></div>
+        <div class="cat-grid" style="${isEdit ? 'opacity:0.5;pointer-events:none;' : ''}">
+          ${cats.map(c=>`<div class="cat-card ${cat===c.id?'sel':''}" onclick="pickCategory('${c.id}')"><span class="ic">${c.ic}</span>${c.label}</div>`).join('')}
+        </div>
+        <form onsubmit="submitModal(event)">
+          ${fields}
+          <div class="modal-actions">
+            <button type="button" class="btn ghost" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn primary">${isEdit ? 'Save changes' : 'Save record'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderSheet(){
+  const m = activeMember();
+  const meds = medsFor(m.id);
+  const tl = timelineFor(m.id);
+  let title = '', rows = '';
+
+  if(sheet === 'meds'){
+    title = 'Active medications';
+    rows = meds.length ? meds.map(med => `
+      <div class="sheet-row">
+        <div>
+          <div class="stitle">${med.name}</div>
+          <div class="snote">${med.dose||''}${med.notes?' · '+med.notes:''}</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-shrink:0;">
+          <button class="del" onclick="sheetEditMed('${m.id}','${med.id}')">edit</button>
+          <button class="del" onclick="sheetDeleteMed('${m.id}','${med.id}')">delete</button>
+        </div>
+      </div>
+    `).join('') : '<div class="empty">No medications recorded.</div>';
+  } else {
+    const typeMap = { conditions:'condition', allergies:'allergy', visits:'visit' };
+    const type = typeMap[sheet];
+    const items = tl.filter(t => t.type === type);
+    title = sheet === 'conditions' ? 'Known conditions' : sheet === 'allergies' ? 'Allergies' : 'Doctor visits';
+    rows = items.length ? items.map(t => `
+      <div class="sheet-row">
+        <div>
+          <div class="st">${t.date}</div>
+          <div class="stitle">${t.title}</div>
+          ${t.type==='visit' ? `<div class="snote">${t.doctor?('Dr. '+t.doctor.replace(/^Dr\.?\s*/,'')+' — '):''}${t.diagnosis||''}${t.followup?' · next follow-up '+t.followup:''}</div>` : ''}
+          ${(t.type!=='visit' && t.note) ? `<div class="snote">${t.note}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:10px;flex-shrink:0;">
+          <button class="del" onclick="sheetEditTimeline('${m.id}','${t.id}')">edit</button>
+          <button class="del" onclick="sheetDeleteTimeline('${m.id}','${t.id}')">delete</button>
+        </div>
+      </div>
+    `).join('') : `<div class="empty">None recorded.</div>`;
+  }
+
+  return `
+    <div class="modal-bg" onclick="if(event.target===this) closeSheet()">
+      <div class="modal">
+        <div class="modal-head"><h2>${title}</h2><button class="close" onclick="closeSheet()">&times;</button></div>
+        ${rows}
+      </div>
+    </div>
+  `;
+}
+
+loadState();
+render();
+</script>
+</body>
+</html>
