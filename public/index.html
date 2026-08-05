@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- VAULT-BUILD-VERSION: 3 (centered popup + delete buttons) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -125,9 +126,9 @@
   .nav-item.active{color:var(--navy);}
 
   /* Modal */
-  .modal-bg{position:fixed;inset:0;background:rgba(18,24,43,0.45);display:flex;align-items:flex-end;z-index:50;}
-  .modal{background:var(--surface);width:100%;max-width:460px;margin:0 auto;border-radius:18px 18px 0 0;
-    padding:18px 18px 26px;max-height:88vh;overflow-y:auto;}
+  .modal-bg{position:fixed;inset:0;background:rgba(18,24,43,0.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;}
+  .modal{background:var(--surface);width:100%;max-width:400px;margin:0 auto;border-radius:16px;
+    padding:20px 20px 22px;max-height:82vh;overflow-y:auto;box-shadow:0 20px 60px rgba(18,24,43,0.35);}
   .modal h2{font-size:15px;margin:0 0 14px;font-weight:800;}
   .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
   .modal-head .close{border:none;background:var(--surface-2);width:28px;height:28px;border-radius:50%;
@@ -222,6 +223,16 @@ function openSheet(type){ sheet = type; render(); }
 function closeSheet(){ sheet = null; render(); }
 function sheetEditMed(mid,id){ sheet = null; openEditMed(mid,id); }
 function sheetEditTimeline(mid,id){ sheet = null; openEditTimeline(mid,id); }
+function sheetDeleteMed(mid,id){
+  if(!confirm('Delete this medication?')) return;
+  state.meds[mid] = (state.meds[mid]||[]).filter(x=>x.id!==id);
+  save(); render();
+}
+function sheetDeleteTimeline(mid,id){
+  if(!confirm('Delete this record?')) return;
+  state.timeline[mid] = (state.timeline[mid]||[]).filter(x=>x.id!==id);
+  save(); render();
+}
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
 
@@ -699,8 +710,9 @@ function renderSheet(){
           <div class="stitle">${med.name}</div>
           <div class="snote">${med.dose||''}${med.notes?' · '+med.notes:''}</div>
         </div>
-        <div style="display:flex;gap:8px;flex-shrink:0;">
+        <div style="display:flex;gap:10px;flex-shrink:0;">
           <button class="del" onclick="sheetEditMed('${m.id}','${med.id}')">edit</button>
+          <button class="del" onclick="sheetDeleteMed('${m.id}','${med.id}')">delete</button>
         </div>
       </div>
     `).join('') : '<div class="empty">No medications recorded.</div>';
@@ -717,8 +729,9 @@ function renderSheet(){
           ${t.type==='visit' ? `<div class="snote">${t.doctor?('Dr. '+t.doctor.replace(/^Dr\.?\s*/,'')+' — '):''}${t.diagnosis||''}${t.followup?' · next follow-up '+t.followup:''}</div>` : ''}
           ${(t.type!=='visit' && t.note) ? `<div class="snote">${t.note}</div>` : ''}
         </div>
-        <div style="display:flex;gap:8px;flex-shrink:0;">
+        <div style="display:flex;gap:10px;flex-shrink:0;">
           <button class="del" onclick="sheetEditTimeline('${m.id}','${t.id}')">edit</button>
+          <button class="del" onclick="sheetDeleteTimeline('${m.id}','${t.id}')">delete</button>
         </div>
       </div>
     `).join('') : `<div class="empty">None recorded.</div>`;
