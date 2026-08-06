@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 3 (centered popup + delete buttons) -->
+<!-- VAULT-BUILD-VERSION: 5 (date picker, blood dropdown, country code, timeline switcher) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -148,9 +148,15 @@
 
   /* Assistant */
   .chat-log{display:flex;flex-direction:column;gap:10px;margin-bottom:12px;}
-  .msg{max-width:85%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.55;white-space:pre-wrap;}
-  .msg.user{align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:3px;}
+  .msg{max-width:85%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.55;}
+  .msg.user{align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:3px;white-space:pre-wrap;}
   .msg.ai{align-self:flex-start;background:var(--surface-2);color:var(--ink);border-bottom-left-radius:3px;}
+  .msg.ai p{margin:0 0 8px 0;}
+  .msg.ai p:last-child{margin-bottom:0;}
+  .msg.ai ul{margin:0 0 8px 0;padding-left:18px;}
+  .msg.ai ul:last-child{margin-bottom:0;}
+  .msg.ai li{margin-bottom:4px;}
+  .msg.ai strong{color:var(--navy);}
   .suggest{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
   .suggest button{font-size:11.5px;background:var(--surface-2);color:var(--ink-soft);border:1px solid var(--line);
     padding:6px 11px;border-radius:20px;cursor:pointer;font-family:inherit;}
@@ -180,10 +186,10 @@
 function seedData(){
   return {
     members: [
-      { id:'m1', name:'Meera Sharma', role:'You', dob:'12 Mar 1994', blood:'B+', emergencyContact:'Rohan Sharma · +91 98xxxxxx01' },
-      { id:'m2', name:'Rajesh Sharma', role:'Father', dob:'04 Jul 1962', blood:'O+', emergencyContact:'Meera Sharma · +91 98xxxxxx02' },
-      { id:'m3', name:'Kavita Sharma', role:'Mother', dob:'19 Sep 1965', blood:'A+', emergencyContact:'Meera Sharma · +91 98xxxxxx02' },
-      { id:'m4', name:'Aarav Sharma', role:'Brother', dob:'22 Jan 1998', blood:'O+', emergencyContact:'Rajesh Sharma · +91 98xxxxxx03' },
+      { id:'m1', name:'Meera Sharma', role:'You', dob:'1994-03-12', blood:'B+', emergencyName:'Rohan Sharma', emergencyCode:'+91', emergencyPhone:'98xxxxxx01' },
+      { id:'m2', name:'Rajesh Sharma', role:'Father', dob:'1962-07-04', blood:'O+', emergencyName:'Meera Sharma', emergencyCode:'+91', emergencyPhone:'98xxxxxx02' },
+      { id:'m3', name:'Kavita Sharma', role:'Mother', dob:'1965-09-19', blood:'A+', emergencyName:'Meera Sharma', emergencyCode:'+91', emergencyPhone:'98xxxxxx02' },
+      { id:'m4', name:'Aarav Sharma', role:'Brother', dob:'1998-01-22', blood:'O+', emergencyName:'Rajesh Sharma', emergencyCode:'+91', emergencyPhone:'98xxxxxx03' },
     ],
     meds: {
       m2:[{id:'d1',name:'Metformin',dose:'500mg, twice daily',status:'review',notes:'With meals'},
@@ -210,7 +216,7 @@ function seedData(){
       m1:[{id:'t11',date:'2025-03-01',type:'allergy',title:'Shellfish',note:'Mild reaction, confirmed by allergist'}],
       m4:[{id:'t12',date:'2022-04-11',type:'allergy',title:'Pollen',note:'Seasonal, worse in spring'}],
     },
-    activeMember:'m2', activeTab:'family', chats:{}
+    activeMember:'m2', activeTab:'family', chats:{}, familyChat:[]
   };
 }
 
@@ -218,6 +224,7 @@ let state = null;
 let loading = false;
 let modal = null; // {type:'add', category:'medication'|'condition'|'allergy'|'visit'|'reading'}
 let sheet = null; // 'meds' | 'conditions' | 'allergies' | 'visits' | null
+let assistantScope = {type:'family'}; // {type:'family'} or {type:'member', id}
 
 function openSheet(type){ sheet = type; render(); }
 function closeSheet(){ sheet = null; render(); }
@@ -259,14 +266,24 @@ function medsFor(id){ return state.meds[id]||[]; }
 function timelineFor(id){ return (state.timeline[id]||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)); }
 function initials(name){ return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
 
-function goTab(tab){ state.activeTab = tab; save(); render(); }
+function goTab(tab){
+  state.activeTab = tab;
+  if(tab==='assistant') assistantScope = {type:'family'};
+  save(); render();
+}
 function selectMember(id){ state.activeMember = id; state.activeTab = 'overview'; save(); render(); }
+function selectMemberTimeline(id){ state.activeMember = id; state.activeTab = 'timeline'; save(); render(); }
+function openMemberAssistant(id){
+  state.activeMember = id; state.activeTab = 'assistant';
+  assistantScope = {type:'member', id};
+  save(); render();
+}
 
 function addMember(){
   const name = prompt("Family member's name:");
   if(!name) return;
   const id = uid();
-  state.members.push({id,name,role:'',dob:'',blood:'',emergencyContact:''});
+  state.members.push({id,name,role:'',dob:'',blood:'',emergencyName:'',emergencyCode:'+91',emergencyPhone:''});
   state.meds[id]=[]; state.timeline[id]=[];
   state.activeMember = id; state.activeTab='overview';
   save(); render();
@@ -359,12 +376,20 @@ function delTimeline(memberId,id){
 function updateField(memberId,field,value){ const m=state.members.find(x=>x.id===memberId); if(m) m[field]=value; save(); }
 
 /* ---------- Assistant ---------- */
+function formatDob(iso){
+  if(!iso) return '';
+  const d = new Date(iso+'T00:00:00');
+  if(isNaN(d)) return iso;
+  return d.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+}
+
 function compileRecordText(memberId){
   const m = state.members.find(x=>x.id===memberId);
   const meds = medsFor(memberId); const tl = timelineFor(memberId);
   let text = `Patient: ${m.name} (${m.role||'family member'})\n`;
-  if(m.dob) text += `DOB: ${m.dob}\n`;
+  if(m.dob) text += `DOB: ${formatDob(m.dob)}\n`;
   if(m.blood) text += `Blood group: ${m.blood}\n`;
+  if(m.emergencyName) text += `Emergency contact: ${m.emergencyName}${m.emergencyPhone?` (${m.emergencyCode||''} ${m.emergencyPhone})`:''}\n`;
   text += `\nCurrent medications:\n` + (meds.length ? meds.map(x=>`- ${x.name}${x.dose?' ('+x.dose+')':''}${x.notes?' — '+x.notes:''}`).join('\n') : '- none recorded');
   text += `\n\nTimeline:\n` + (tl.length ? tl.map(x=>{
     if(x.type==='visit') return `- [${x.date}] Doctor visit with ${x.doctor||'unknown'}: ${x.diagnosis||x.note||''}${x.followup?' (follow-up '+x.followup+')':''}`;
@@ -374,23 +399,33 @@ function compileRecordText(memberId){
   return text;
 }
 
+function compileAllRecordsText(){
+  return state.members.map(m => compileRecordText(m.id)).join('\n\n---\n\n');
+}
+
 function chatFor(memberId){ if(!state.chats[memberId]) state.chats[memberId]=[]; return state.chats[memberId]; }
 function clearChat(memberId){ state.chats[memberId]=[]; save(); render(); }
+function clearFamilyChat(){ state.familyChat=[]; save(); render(); }
 function askSuggested(text){ document.getElementById('ai-question').value = text; askAI(); }
+
+function currentChat(){
+  return assistantScope.type==='member' ? chatFor(assistantScope.id) : state.familyChat;
+}
 
 async function askAI(){
   const box = document.getElementById('ai-question');
   const q = box.value.trim();
   if(!q) return;
-  const m = activeMember();
-  const chat = chatFor(m.id);
+  const isMemberScope = assistantScope.type==='member';
+  const record = isMemberScope ? compileRecordText(assistantScope.id) : compileAllRecordsText();
+  const chat = currentChat();
   chat.push({role:'user', text:q});
   box.value = '';
   loading = true; save(); render();
   try{
     const response = await fetch('/api/ask', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ record: compileRecordText(m.id), question: q })
+      body: JSON.stringify({ record, question: q })
     });
     const data = await response.json();
     chat.push({role:'ai', text: data.answer || data.error || 'No answer returned.'});
@@ -398,6 +433,29 @@ async function askAI(){
     chat.push({role:'ai', text:'Could not reach the AI service: ' + e.message});
   }
   loading = false; save(); render();
+}
+
+/* Minimal markdown -> HTML for chat bubbles: bold, bullet lists, line breaks. Escapes HTML first. */
+function renderChatText(raw){
+  let text = raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const lines = text.split('\n');
+  let html = ''; let inList = false;
+  for(const line of lines){
+    const trimmed = line.trim();
+    const bulletMatch = trimmed.match(/^[\*\-]\s+(.*)/);
+    if(bulletMatch){
+      if(!inList){ html += '<ul>'; inList = true; }
+      html += `<li>${bulletMatch[1]}</li>`;
+    } else {
+      if(inList){ html += '</ul>'; inList = false; }
+      if(trimmed === ''){ html += ''; }
+      else { html += `<p>${trimmed}</p>`; }
+    }
+  }
+  if(inList) html += '</ul>';
+  // bold: **text**
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  return html;
 }
 
 /* ---------- Export ---------- */
@@ -466,10 +524,14 @@ function render(){
   // wire up field listeners that need direct binding (member overview inline fields)
   const bloodInput = document.getElementById('blood-input');
   const dobInput = document.getElementById('dob-input');
-  const emInput = document.getElementById('em-input');
+  const emNameInput = document.getElementById('em-name-input');
+  const emCodeInput = document.getElementById('em-code-input');
+  const emPhoneInput = document.getElementById('em-phone-input');
   if(bloodInput) bloodInput.onchange = e=>updateField(activeMember().id,'blood',e.target.value);
   if(dobInput) dobInput.onchange = e=>updateField(activeMember().id,'dob',e.target.value);
-  if(emInput) emInput.onchange = e=>updateField(activeMember().id,'emergencyContact',e.target.value);
+  if(emNameInput) emNameInput.onchange = e=>updateField(activeMember().id,'emergencyName',e.target.value);
+  if(emCodeInput) emCodeInput.onchange = e=>updateField(activeMember().id,'emergencyCode',e.target.value);
+  if(emPhoneInput) emPhoneInput.onchange = e=>updateField(activeMember().id,'emergencyPhone',e.target.value);
 
   const chatLog = document.getElementById('chat-log');
   if(chatLog) chatLog.scrollTop = chatLog.scrollHeight;
@@ -478,15 +540,21 @@ function render(){
 function topTitle(tab){
   if(tab==='family') return 'Vault';
   if(tab==='settings') return 'Settings';
+  if(tab==='assistant'){
+    if(assistantScope.type==='member'){
+      const mm = state.members.find(x=>x.id===assistantScope.id);
+      return 'Ask about ' + (mm ? mm.name.split(' ')[0] : '');
+    }
+    return 'Family Assistant';
+  }
   const m = activeMember();
-  if(tab==='assistant') return 'Ask about ' + m.name.split(' ')[0];
   return m.name;
 }
 function topSub(tab){
   if(tab==='family') return 'family health records';
   if(tab==='settings') return 'about this demo';
+  if(tab==='assistant') return assistantScope.type==='member' ? 'answers only from stored records' : 'answers across the whole family';
   const m = activeMember();
-  if(tab==='assistant') return 'answers only from stored records';
   return m.role || 'family member';
 }
 
@@ -520,6 +588,9 @@ function renderMember(tab){
 
   if(tab === 'timeline'){
     return `
+      <div class="scope-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+        ${state.members.map(mm=>`<button class="del ${mm.id===m.id?'active-scope':''}" style="${mm.id===m.id?'background:var(--navy);color:#fff;':''}" onclick="selectMemberTimeline('${mm.id}')">${mm.name.split(' ')[0]}</button>`).join('')}
+      </div>
       <div class="panel">
         <h2>Medical timeline <span style="font-weight:400;text-transform:none;color:var(--ink-faint);font-size:11px;">most recent first</span><span class="add-mini" onclick="openAddModal()">+ Add</span></h2>
         <div class="timeline">
@@ -561,9 +632,20 @@ function renderMember(tab){
 
     <div class="panel emergency">
       <h2>Emergency card</h2>
-      <div class="field"><input id="blood-input" placeholder="Blood group" value="${m.blood||''}"></div>
-      <div class="field"><input id="dob-input" placeholder="Date of birth" value="${m.dob||''}"></div>
-      <div class="field"><input id="em-input" placeholder="Emergency contact" value="${m.emergencyContact||''}"></div>
+      <div class="field">
+        <select id="blood-input">
+          <option value="" ${!m.blood?'selected':''}>Blood group</option>
+          ${['A+','A-','B+','B-','AB+','AB-','O+','O-','Unknown'].map(b=>`<option value="${b}" ${m.blood===b?'selected':''}>${b}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><input id="dob-input" type="date" value="${m.dob||''}"></div>
+      <div class="field"><input id="em-name-input" placeholder="Emergency contact name" value="${m.emergencyName||''}"></div>
+      <div class="field" style="display:flex;gap:8px;">
+        <select id="em-code-input" style="max-width:110px;">
+          ${[['+91','India +91'],['+1','US/Canada +1'],['+44','UK +44'],['+61','Australia +61'],['+971','UAE +971'],['+65','Singapore +65'],['+49','Germany +49'],['+33','France +33'],['+81','Japan +81'],['+86','China +86']].map(([code,label])=>`<option value="${code}" ${(m.emergencyCode||'+91')===code?'selected':''}>${label}</option>`).join('')}
+        </select>
+        <input id="em-phone-input" placeholder="Phone number" value="${m.emergencyPhone||''}" style="flex:1;">
+      </div>
       <div class="em-row"><b>Allergies:</b> ${allergies.map(a=>a.title).join(', ') || 'none recorded'}</div>
     </div>
 
@@ -588,30 +670,42 @@ function renderMember(tab){
 
     <div class="action-row">
       <button class="btn primary" onclick="exportSummary()">Export summary (PDF)</button>
-      <button class="btn ask" onclick="goTab('assistant')">Ask Vault</button>
+      <button class="btn ask" onclick="openMemberAssistant('${m.id}')">Ask about ${m.name.split(' ')[0]}</button>
     </div>
   `;
 }
 
 function renderAssistant(){
-  const m = activeMember();
-  const chat = chatFor(m.id);
+  const isMemberScope = assistantScope.type==='member';
+  const m = isMemberScope ? (state.members.find(x=>x.id===assistantScope.id) || activeMember()) : null;
+  const chat = currentChat();
+  const firstName = isMemberScope ? m.name.split(' ')[0] : null;
+
+  const suggestions = isMemberScope ? `
+    <button onclick="askSuggested('What medicines does ${firstName} currently take, with doses?')">current meds</button>
+    <button onclick="askSuggested('Summarize ${firstName}\\'s medical history for a doctor.')">summarize history</button>
+    <button onclick="askSuggested('Does ${firstName} have any drug allergies?')">allergies</button>
+  ` : `
+    <button onclick="askSuggested('Which family members have any drug allergies?')">who has allergies?</button>
+    <button onclick="askSuggested('Whose medications need review soon?')">meds needing review</button>
+    <button onclick="askSuggested('List each family member\\'s blood group.')">blood groups</button>
+  `;
+
   return `
+    ${!isMemberScope ? `<div class="scope-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+      ${state.members.map(mm=>`<button class="del" onclick="openMemberAssistant('${mm.id}')">Ask about ${mm.name.split(' ')[0]}</button>`).join('')}
+    </div>` : ''}
     <div id="chat-log" class="chat-log" style="max-height:calc(100vh - 280px);overflow-y:auto;">
-      ${chat.length ? chat.map(msg=>`<div class="msg ${msg.role}">${msg.text.replace(/</g,'&lt;')}</div>`).join('')
-        : `<div class="suggest">
-             <button onclick="askSuggested('What medicines does ${m.name.split(' ')[0]} currently take, with doses?')">current meds</button>
-             <button onclick="askSuggested('Summarize ${m.name.split(' ')[0]}\\'s medical history for a doctor.')">summarize history</button>
-             <button onclick="askSuggested('Does ${m.name.split(' ')[0]} have any drug allergies?')">allergies</button>
-           </div>`}
+      ${chat.length ? chat.map(msg=>`<div class="msg ${msg.role}">${msg.role==='ai' ? renderChatText(msg.text) : msg.text.replace(/</g,'&lt;')}</div>`).join('')
+        : `<div class="suggest">${suggestions}</div>`}
       ${loading ? '<div class="loading-dots">Reading the records…</div>' : ''}
     </div>
-    ${chat.length ? `<div style="text-align:right;margin-bottom:6px;"><button class="del" onclick="clearChat('${m.id}')">New question — clear this chat</button></div>` : ''}
+    ${chat.length ? `<div style="text-align:right;margin-bottom:6px;"><button class="del" onclick="${isMemberScope ? `clearChat('${m.id}')` : 'clearFamilyChat()'}">New question — clear this chat</button></div>` : ''}
     <div class="ask-bar">
-      <textarea id="ai-question" placeholder="Ask about ${m.name.split(' ')[0]}'s health…" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); askAI();}"></textarea>
+      <textarea id="ai-question" placeholder="${isMemberScope ? `Ask about ${firstName}'s health…` : 'Ask about anyone in the family…'}" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); askAI();}"></textarea>
       <button class="ask-send" onclick="askAI()">&#10148;</button>
     </div>
-    <div style="font-size:10.5px;color:var(--ink-faint);margin-top:8px;text-align:center;">Answers use only the records stored for ${m.name.split(' ')[0]} — nothing is invented.</div>
+    <div style="font-size:10.5px;color:var(--ink-faint);margin-top:8px;text-align:center;">Answers use only the records stored ${isMemberScope ? `for ${firstName}` : 'for this family'} — nothing is invented.</div>
   `;
 }
 
