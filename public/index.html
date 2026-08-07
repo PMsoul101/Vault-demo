@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 5 (date picker, blood dropdown, country code, timeline switcher) -->
+<!-- VAULT-BUILD-VERSION: 6 (proper add-member modal + working search) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -37,7 +37,9 @@
 
   /* Family list */
   .search{background:var(--surface);border:1px solid var(--line);border-radius:24px;
-    padding:10px 16px;font-size:13.5px;color:var(--ink-faint);margin-bottom:14px;}
+    padding:10px 16px;font-size:13.5px;color:var(--ink-faint);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+  .search input{border:none;outline:none;background:transparent;font-size:13.5px;color:var(--ink);flex:1;font-family:inherit;}
+  .search input::placeholder{color:var(--ink-faint);}
   .fam-count{font-size:13px;font-weight:700;color:var(--ink-soft);margin:4px 0 10px;}
   .fam-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
     padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:10px;cursor:pointer;}
@@ -225,6 +227,8 @@ let loading = false;
 let modal = null; // {type:'add', category:'medication'|'condition'|'allergy'|'visit'|'reading'}
 let sheet = null; // 'meds' | 'conditions' | 'allergies' | 'visits' | null
 let assistantScope = {type:'family'}; // {type:'family'} or {type:'member', id}
+let famSearch = '';
+let famModal = false; // true when the "add family member" modal is open
 
 function openSheet(type){ sheet = type; render(); }
 function closeSheet(){ sheet = null; render(); }
@@ -279,13 +283,18 @@ function openMemberAssistant(id){
   save(); render();
 }
 
-function addMember(){
-  const name = prompt("Family member's name:");
+function openAddFamilyModal(){ famModal = true; render(); }
+function closeFamilyModal(){ famModal = false; render(); }
+function submitFamilyModal(e){
+  e.preventDefault();
+  const name = document.getElementById('fm-name').value.trim();
   if(!name) return;
+  const role = document.getElementById('fm-role').value.trim();
   const id = uid();
-  state.members.push({id,name,role:'',dob:'',blood:'',emergencyName:'',emergencyCode:'+91',emergencyPhone:''});
+  state.members.push({id,name,role,dob:'',blood:'',emergencyName:'',emergencyCode:'+91',emergencyPhone:''});
   state.meds[id]=[]; state.timeline[id]=[];
   state.activeMember = id; state.activeTab='overview';
+  famModal = false;
   save(); render();
 }
 
@@ -519,6 +528,7 @@ function render(){
     </div>
     ${modal ? renderModal() : ''}
     ${sheet ? renderSheet() : ''}
+    ${famModal ? renderFamilyModal() : ''}
   `;
 
   // wire up field listeners that need direct binding (member overview inline fields)
@@ -559,23 +569,36 @@ function topSub(tab){
 }
 
 function renderFamily(){
+  const q = (famSearch||'').trim().toLowerCase();
+  const list = q ? state.members.filter(m => m.name.toLowerCase().includes(q) || (m.role||'').toLowerCase().includes(q)) : state.members;
   return `
-    <div class="search">&#128269;&nbsp; Search family members…</div>
-    <div class="fam-count">${state.members.length} family members</div>
-    ${state.members.map(m=>{
-      const meds = medsFor(m.id).length, conds = (state.timeline[m.id]||[]).filter(t=>t.type==='condition').length;
-      return `<div class="fam-card ${m.id===state.activeMember?'active':''}" onclick="selectMember('${m.id}')">
-        <div class="avatar">${initials(m.name)}</div>
-        <div class="fam-info">
-          <div class="nm">${m.name} <span class="role">(${m.role||'Member'})</span></div>
-          <div class="stats">${meds} medication${meds!==1?'s':''} · ${conds} condition${conds!==1?'s':''}</div>
-        </div>
-        <div class="chev">&#8250;</div>
-      </div>`;
-    }).join('')}
-    <div class="add-fam" onclick="addMember()">+ Add family member</div>
+    <div class="search"><span>&#128269;</span><input id="fam-search-input" placeholder="Search family members…" value="${famSearch||''}" oninput="famSearch=this.value; renderList();"></div>
+    <div class="fam-count">${list.length} of ${state.members.length} family members</div>
+    <div id="fam-list">${renderFamilyList(list)}</div>
+    <div class="add-fam" onclick="openAddFamilyModal()">+ Add family member</div>
     <div class="trust-note">This is a demo — all data shown is fictional and resets automatically when you next open this page.</div>
   `;
+}
+function renderFamilyList(list){
+  if(!list.length) return `<div class="empty">No family members match your search.</div>`;
+  return list.map(m=>{
+    const meds = medsFor(m.id).length, conds = (state.timeline[m.id]||[]).filter(t=>t.type==='condition').length;
+    return `<div class="fam-card ${m.id===state.activeMember?'active':''}" onclick="selectMember('${m.id}')">
+      <div class="avatar">${initials(m.name)}</div>
+      <div class="fam-info">
+        <div class="nm">${m.name} <span class="role">(${m.role||'Member'})</span></div>
+        <div class="stats">${meds} medication${meds!==1?'s':''} · ${conds} condition${conds!==1?'s':''}</div>
+      </div>
+      <div class="chev">&#8250;</div>
+    </div>`;
+  }).join('');
+}
+/* Re-renders just the search count + list so the search input never loses focus while typing */
+function renderList(){
+  const q = (famSearch||'').trim().toLowerCase();
+  const list = q ? state.members.filter(m => m.name.toLowerCase().includes(q) || (m.role||'').toLowerCase().includes(q)) : state.members;
+  document.querySelector('.fam-count').textContent = `${list.length} of ${state.members.length} family members`;
+  document.getElementById('fam-list').innerHTML = renderFamilyList(list);
 }
 
 function renderMember(tab){
@@ -715,6 +738,24 @@ function renderSettings(){
     <div class="settings-item"><b>Your data</b><span>Nothing you type here is sent to or stored on any server other than your own browser session, and the AI questions you ask.</span></div>
     <div class="settings-item"><b>About Vault</b><span>A concept for organizing a family's medical history in one place, with an AI assistant that can answer a doctor's question instantly from stored records.</span></div>
     <button class="btn ghost" style="width:100%;margin-top:6px;" onclick="resetAll()">Reset demo to Sharma family baseline</button>
+  `;
+}
+
+function renderFamilyModal(){
+  return `
+    <div class="modal-bg" onclick="if(event.target===this) closeFamilyModal()">
+      <div class="modal">
+        <div class="modal-head"><h2>Add family member</h2><button class="close" onclick="closeFamilyModal()">&times;</button></div>
+        <form onsubmit="submitFamilyModal(event)">
+          <div class="field"><label>Name</label><input id="fm-name" placeholder="e.g. Harish Sharma" autofocus></div>
+          <div class="field"><label>Relation</label><input id="fm-role" placeholder="e.g. Grandfather, Sister"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn ghost" onclick="closeFamilyModal()">Cancel</button>
+            <button type="submit" class="btn primary">Add member</button>
+          </div>
+        </form>
+      </div>
+    </div>
   `;
 }
 
