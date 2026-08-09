@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 7 (dark mode + UI polish pass) -->
+<!-- VAULT-BUILD-VERSION: 8 (fix invisible date field + chat text in dark mode) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7,6 +7,7 @@
 <title>Vault — family health records (demo)</title>
 <style>
   :root{
+    color-scheme: light;
     --bg:#F4F5F7; --surface:#FFFFFF; --surface-2:#F0F1F4;
     --ink:#12182B; --ink-soft:#525A70; --ink-faint:#9298A8;
     --line:#E4E6EC; --line-strong:#D2D5DE;
@@ -19,6 +20,7 @@
     --shadow-md:0 4px 14px rgba(18,24,43,0.08), 0 1px 3px rgba(18,24,43,0.06);
   }
   [data-theme="dark"]{
+    color-scheme: dark;
     --bg:#0F1420; --surface:#171D2C; --surface-2:#1F2637;
     --ink:#EDEFF5; --ink-soft:#AEB4C4; --ink-faint:#767E93;
     --line:#2B3245; --line-strong:#3A4256;
@@ -173,6 +175,7 @@
   .field input, .field select, .field textarea{
     width:100%;font-family:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line-strong);
     border-radius:8px;background:var(--surface-2);color:var(--ink);}
+  .field input::placeholder, .field textarea::placeholder, .ask-bar textarea::placeholder{color:var(--ink-faint);}
   .field textarea{resize:vertical;min-height:56px;}
   .modal-actions{display:flex;gap:8px;margin-top:6px;}
 
@@ -192,7 +195,7 @@
     padding:6px 11px;border-radius:20px;cursor:pointer;font-family:inherit;}
   .ask-bar{position:sticky;bottom:0;background:var(--bg);display:flex;gap:8px;padding-top:8px;}
   .ask-bar textarea{flex:1;font-family:inherit;font-size:13px;padding:9px 12px;border:1px solid var(--line-strong);
-    border-radius:20px;background:var(--surface);resize:none;min-height:38px;max-height:80px;}
+    border-radius:20px;background:var(--surface);color:var(--ink);resize:none;min-height:38px;max-height:80px;}
   .ask-send{background:var(--navy);color:#fff;border:none;border-radius:50%;width:38px;height:38px;
     flex-shrink:0;cursor:pointer;font-size:15px;}
   .loading-dots{color:var(--ink-faint);font-style:italic;font-size:12.5px;padding:4px 0;}
