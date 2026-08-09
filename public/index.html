@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 8 (fix invisible date field + chat text in dark mode) -->
+<!-- VAULT-BUILD-VERSION: 10 (Stage 1: timeline filters + reading colors + records link) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -15,6 +15,8 @@
     --amber:#C9791E; --amber-bg:#FBEBD6;
     --sage:#3C7A5C; --sage-bg:#E1F0E7;
     --rose:#B0473E; --rose-bg:#F8E4E1;
+    --sugar:#2E8B8B; --sugar-bg:#DFF0F0;
+    --bp:#6B5FA8; --bp-bg:#E9E5F5;
     --radius:12px;
     --shadow-sm:0 1px 2px rgba(18,24,43,0.05), 0 1px 1px rgba(18,24,43,0.04);
     --shadow-md:0 4px 14px rgba(18,24,43,0.08), 0 1px 3px rgba(18,24,43,0.06);
@@ -28,6 +30,8 @@
     --amber:#E8A855; --amber-bg:#3A2E1A;
     --sage:#6FBE93; --sage-bg:#1B3226;
     --rose:#E28178; --rose-bg:#3A2320;
+    --sugar:#5FC4C4; --sugar-bg:#1B3535;
+    --bp:#A99FE0; --bp-bg:#2E2A45;
     --shadow-sm:0 1px 2px rgba(0,0,0,0.25);
     --shadow-md:0 6px 20px rgba(0,0,0,0.35);
   }
@@ -118,6 +122,20 @@
   .tl-entry.allergy::before{background:var(--amber);}
   .tl-entry.visit::before{background:var(--sage);}
   .tl-entry.reading::before{background:var(--navy-2);}
+  .tl-entry.reading.metric-sugar::before{background:var(--sugar);}
+  .tl-entry.reading.metric-bp::before{background:var(--bp);}
+  .tl-tag.reading.metric-sugar{background:var(--sugar-bg);color:var(--sugar);}
+  .tl-tag.reading.metric-bp{background:var(--bp-bg);color:var(--bp);}
+  .filter-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .filter-chip{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:20px;border:1px solid var(--line-strong);
+    background:var(--surface);color:var(--ink-soft);cursor:pointer;transition:background-color 0.15s ease, color 0.15s ease;}
+  .filter-chip.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .readings-link{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;
+    cursor:pointer;box-shadow:var(--shadow-sm);font-size:13px;font-weight:600;color:var(--ink-soft);
+    transition:background-color 0.2s ease, border-color 0.2s ease;}
+  .readings-link:active{background:var(--surface-2);}
+  .readings-link .chev{color:var(--ink-faint);font-size:16px;}
   .tl-date{font-size:10.5px;color:var(--ink-faint);font-weight:700;}
   .tl-title{font-size:13.5px;font-weight:700;}
   .tl-note{font-size:12px;color:var(--ink-soft);margin-top:1px;}
@@ -176,6 +194,10 @@
     width:100%;font-family:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line-strong);
     border-radius:8px;background:var(--surface-2);color:var(--ink);}
   .field input::placeholder, .field textarea::placeholder, .ask-bar textarea::placeholder{color:var(--ink-faint);}
+  .dob-wrap{position:relative;}
+  .dob-placeholder{position:absolute;left:1px;top:1px;bottom:1px;width:calc(100% - 40px);
+    background:var(--surface-2);border-radius:8px 0 0 8px;display:flex;align-items:center;
+    padding-left:11px;font-size:13.5px;color:var(--ink-faint);pointer-events:none;}
   .field textarea{resize:vertical;min-height:56px;}
   .modal-actions{display:flex;gap:8px;margin-top:6px;}
 
@@ -260,6 +282,20 @@ let sheet = null; // 'meds' | 'conditions' | 'allergies' | 'visits' | null
 let assistantScope = {type:'family'}; // {type:'family'} or {type:'member', id}
 let famSearch = '';
 let famModal = false; // true when the "add family member" modal is open
+let timelineFilter = 'all'; // 'all' | 'condition' | 'visit' | 'reading' | 'allergy'
+
+function metricSlug(metric){
+  if(!metric) return '';
+  const m = metric.toLowerCase();
+  if(m.includes('sugar')) return 'metric-sugar';
+  if(m.includes('pressure')) return 'metric-bp';
+  return '';
+}
+function setTimelineFilter(f){ timelineFilter = f; render(); }
+function goToReadings(memberId){
+  state.activeMember = memberId; state.activeTab = 'timeline'; timelineFilter = 'reading';
+  save(); render();
+}
 
 function loadTheme(){
   const saved = localStorage.getItem('vault-theme');
@@ -585,7 +621,11 @@ function render(){
   const emCodeInput = document.getElementById('em-code-input');
   const emPhoneInput = document.getElementById('em-phone-input');
   if(bloodInput) bloodInput.onchange = e=>updateField(activeMember().id,'blood',e.target.value);
-  if(dobInput) dobInput.onchange = e=>updateField(activeMember().id,'dob',e.target.value);
+  if(dobInput) dobInput.onchange = e=>{
+    updateField(activeMember().id,'dob',e.target.value);
+    const ph = document.querySelector('.dob-placeholder');
+    if(ph) ph.style.display = e.target.value ? 'none' : '';
+  };
   if(emNameInput) emNameInput.onchange = e=>updateField(activeMember().id,'emergencyName',e.target.value);
   if(emCodeInput) emCodeInput.onchange = e=>updateField(activeMember().id,'emergencyCode',e.target.value);
   if(emPhoneInput) emPhoneInput.onchange = e=>updateField(activeMember().id,'emergencyPhone',e.target.value);
@@ -657,15 +697,22 @@ function renderMember(tab){
   tl.forEach(t=>{ if(t.type==='reading'){ (readingsByMetric[t.metric]=readingsByMetric[t.metric]||[]).push(t); } });
 
   if(tab === 'timeline'){
+    const filtered = timelineFilter==='all' ? tl : tl.filter(t=>t.type===timelineFilter);
+    const chips = [
+      ['all','All'], ['condition','Conditions'], ['visit','Visits'], ['reading','Readings'], ['allergy','Allergies']
+    ];
     return `
       <div class="scope-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
         ${state.members.map(mm=>`<button class="del ${mm.id===m.id?'active-scope':''}" style="${mm.id===m.id?'background:var(--navy);color:#fff;':''}" onclick="selectMemberTimeline('${mm.id}')">${mm.name.split(' ')[0]}</button>`).join('')}
       </div>
+      <div class="filter-chips">
+        ${chips.map(([key,label])=>`<button class="filter-chip ${timelineFilter===key?'active':''}" onclick="setTimelineFilter('${key}')">${label}</button>`).join('')}
+      </div>
       <div class="panel">
         <h2>Medical timeline <span style="font-weight:400;text-transform:none;color:var(--ink-faint);font-size:11px;">most recent first</span><span class="add-mini" onclick="openAddModal()">+ Add</span></h2>
         <div class="timeline">
-          ${tl.length ? tl.map(t=>`
-            <div class="tl-entry ${t.type}">
+          ${filtered.length ? filtered.map(t=>`
+            <div class="tl-entry ${t.type} ${t.type==='reading'?metricSlug(t.metric):''}">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                 <div class="tl-date">${t.date}</div>
                 <div style="display:flex;gap:8px;">
@@ -673,13 +720,13 @@ function renderMember(tab){
                   <button class="del" onclick="delTimeline('${m.id}','${t.id}')">remove</button>
                 </div>
               </div>
-              <span class="tl-tag ${t.type}">${t.type}</span>
+              <span class="tl-tag ${t.type} ${t.type==='reading'?metricSlug(t.metric):''}">${t.type}</span>
               <span class="tl-title">${t.title}</span>
               ${t.type==='visit' ? `<div class="tl-note">${t.doctor?('Dr. '+t.doctor.replace(/^Dr\.?\s*/,'')+' — '):''}${t.diagnosis||''}${t.followup?' · next follow-up '+t.followup:''}</div>` : ''}
               ${t.type==='reading' ? `<div class="tl-note">${t.value} ${t.unit||''}</div>` : ''}
               ${(t.type!=='visit' && t.type!=='reading' && t.note) ? `<div class="tl-note">${t.note}</div>` : ''}
             </div>
-          `).join('') : '<div class="empty">No entries yet.</div>'}
+          `).join('') : `<div class="empty">${timelineFilter==='all' ? 'No entries yet.' : 'No entries in this category yet.'}</div>`}
         </div>
       </div>
       ${Object.keys(readingsByMetric).map(metric=>`
@@ -700,6 +747,12 @@ function renderMember(tab){
       <div class="stat-card" onclick="openSheet('visits')"><div class="n">${(tl.filter(t=>t.type==='visit')[0]||{}).date || '—'}</div><div class="l">Last doctor visit</div></div>
     </div>
 
+    ${Object.keys(readingsByMetric).length ? `
+    <div class="readings-link" onclick="goToReadings('${m.id}')">
+      <span>Blood sugar &amp; blood pressure readings</span>
+      <span class="chev">&#8250;</span>
+    </div>` : ''}
+
     <div class="panel emergency">
       <h2>Emergency card</h2>
       <div class="field">
@@ -708,7 +761,10 @@ function renderMember(tab){
           ${['A+','A-','B+','B-','AB+','AB-','O+','O-','Unknown'].map(b=>`<option value="${b}" ${m.blood===b?'selected':''}>${b}</option>`).join('')}
         </select>
       </div>
-      <div class="field"><input id="dob-input" type="date" value="${m.dob||''}"></div>
+      <div class="field dob-wrap">
+        <input id="dob-input" type="date" value="${m.dob||''}">
+        ${!m.dob ? `<span class="dob-placeholder">mm/dd/yyyy</span>` : ''}
+      </div>
       <div class="field"><input id="em-name-input" placeholder="Emergency contact name" value="${m.emergencyName||''}"></div>
       <div class="field" style="display:flex;gap:8px;">
         <select id="em-code-input" style="max-width:110px;">
