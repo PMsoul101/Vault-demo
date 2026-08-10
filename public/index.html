@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 10 (Stage 1: timeline filters + reading colors + records link) -->
+<!-- VAULT-BUILD-VERSION: 11 (Stage 2: medication discontinue flow + history) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -17,6 +17,7 @@
     --rose:#B0473E; --rose-bg:#F8E4E1;
     --sugar:#2E8B8B; --sugar-bg:#DFF0F0;
     --bp:#6B5FA8; --bp-bg:#E9E5F5;
+    --med:#8A5A44; --med-bg:#F0E4DE;
     --radius:12px;
     --shadow-sm:0 1px 2px rgba(18,24,43,0.05), 0 1px 1px rgba(18,24,43,0.04);
     --shadow-md:0 4px 14px rgba(18,24,43,0.08), 0 1px 3px rgba(18,24,43,0.06);
@@ -32,6 +33,7 @@
     --rose:#E28178; --rose-bg:#3A2320;
     --sugar:#5FC4C4; --sugar-bg:#1B3535;
     --bp:#A99FE0; --bp-bg:#2E2A45;
+    --med:#C99B82; --med-bg:#332720;
     --shadow-sm:0 1px 2px rgba(0,0,0,0.25);
     --shadow-md:0 6px 20px rgba(0,0,0,0.35);
   }
@@ -124,6 +126,8 @@
   .tl-entry.reading::before{background:var(--navy-2);}
   .tl-entry.reading.metric-sugar::before{background:var(--sugar);}
   .tl-entry.reading.metric-bp::before{background:var(--bp);}
+  .tl-entry.medication::before{background:var(--med);}
+  .tl-tag.medication{background:var(--med-bg);color:var(--med);}
   .tl-tag.reading.metric-sugar{background:var(--sugar-bg);color:var(--sugar);}
   .tl-tag.reading.metric-bp{background:var(--bp-bg);color:var(--bp);}
   .filter-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
@@ -283,6 +287,55 @@ let assistantScope = {type:'family'}; // {type:'family'} or {type:'member', id}
 let famSearch = '';
 let famModal = false; // true when the "add family member" modal is open
 let timelineFilter = 'all'; // 'all' | 'condition' | 'visit' | 'reading' | 'allergy'
+let discontinueTarget = null; // {memberId, medId} when the discontinue modal is open
+
+function activeMedsFor(id){ return medsFor(id).filter(x=>!x.endDate); }
+
+/* Keeps a medication's Timeline entry in sync with its endDate.
+   Setting an endDate creates/updates a "discontinued" entry; clearing it removes that entry. */
+function syncMedDiscontinueEntry(memberId, med){
+  if(!state.timeline[memberId]) state.timeline[memberId]=[];
+  if(med.endDate){
+    let entry = med.timelineEntryId ? state.timeline[memberId].find(x=>x.id===med.timelineEntryId) : null;
+    if(entry){
+      entry.date = med.endDate; entry.note = med.discontinueNote||''; entry.title = `${med.name} discontinued`;
+    } else {
+      entry = {id:uid(), date:med.endDate, type:'medication', title:`${med.name} discontinued`, note: med.discontinueNote||''};
+      state.timeline[memberId].push(entry);
+      med.timelineEntryId = entry.id;
+    }
+  } else if(med.timelineEntryId){
+    state.timeline[memberId] = state.timeline[memberId].filter(x=>x.id!==med.timelineEntryId);
+    med.timelineEntryId = null;
+  }
+}
+
+function openDiscontinue(memberId, medId){
+  sheet = null;
+  discontinueTarget = {memberId, medId};
+  render();
+}
+function closeDiscontinue(){ discontinueTarget = null; render(); }
+function confirmDiscontinue(e){
+  e.preventDefault();
+  const {memberId, medId} = discontinueTarget;
+  const med = (state.meds[memberId]||[]).find(x=>x.id===medId);
+  if(!med){ discontinueTarget=null; render(); return; }
+  const date = document.getElementById('dc-date').value || new Date().toISOString().slice(0,10);
+  const note = document.getElementById('dc-note').value.trim();
+  med.endDate = date;
+  med.discontinueNote = note;
+  syncMedDiscontinueEntry(memberId, med);
+  discontinueTarget = null;
+  save(); render();
+}
+function deleteMedWithoutLogging(){
+  if(!confirm('Delete this medication with no history logged? This cannot be undone.')) return;
+  const {memberId, medId} = discontinueTarget;
+  state.meds[memberId] = (state.meds[memberId]||[]).filter(x=>x.id!==medId);
+  discontinueTarget = null;
+  save(); render();
+}
 
 function metricSlug(metric){
   if(!metric) return '';
@@ -311,11 +364,6 @@ function openSheet(type){ sheet = type; render(); }
 function closeSheet(){ sheet = null; render(); }
 function sheetEditMed(mid,id){ sheet = null; openEditMed(mid,id); }
 function sheetEditTimeline(mid,id){ sheet = null; openEditTimeline(mid,id); }
-function sheetDeleteMed(mid,id){
-  if(!confirm('Delete this medication?')) return;
-  state.meds[mid] = (state.meds[mid]||[]).filter(x=>x.id!==id);
-  save(); render();
-}
 function sheetDeleteTimeline(mid,id){
   if(!confirm('Delete this record?')) return;
   state.timeline[mid] = (state.timeline[mid]||[]).filter(x=>x.id!==id);
@@ -407,14 +455,18 @@ function submitModal(e){
     const dose = document.getElementById('f-dose').value.trim();
     const status = document.getElementById('f-status').value;
     const notes = document.getElementById('f-notes').value.trim();
+    const endDate = document.getElementById('f-enddate').value || '';
     if(!name) return;
     if(!state.meds[m.id]) state.meds[m.id]=[];
+    let med;
     if(modal.editId){
-      const med = state.meds[m.id].find(x=>x.id===modal.editId);
-      if(med){ med.name=name; med.dose=dose; med.status=status; med.notes=notes; }
+      med = state.meds[m.id].find(x=>x.id===modal.editId);
+      if(med){ med.name=name; med.dose=dose; med.status=status; med.notes=notes; med.endDate=endDate; }
     } else {
-      state.meds[m.id].push({id:uid(),name,dose,status,notes});
+      med = {id:uid(),name,dose,status,notes,endDate};
+      state.meds[m.id].push(med);
     }
+    if(med) syncMedDiscontinueEntry(m.id, med);
   } else if(cat === 'reading'){
     const metric = document.getElementById('f-metric').value;
     const value = parseFloat(document.getElementById('f-value').value);
@@ -457,10 +509,6 @@ function submitModal(e){
   save(); modal=null; render();
 }
 
-function delMed(memberId,id){
-  if(!confirm('Remove this medication?')) return;
-  state.meds[memberId]=(state.meds[memberId]||[]).filter(x=>x.id!==id); save(); render();
-}
 function delTimeline(memberId,id){
   if(!confirm('Remove this timeline entry?')) return;
   state.timeline[memberId]=(state.timeline[memberId]||[]).filter(x=>x.id!==id); save(); render();
@@ -477,12 +525,18 @@ function formatDob(iso){
 
 function compileRecordText(memberId){
   const m = state.members.find(x=>x.id===memberId);
-  const meds = medsFor(memberId); const tl = timelineFor(memberId);
+  const allMeds = medsFor(memberId);
+  const meds = allMeds.filter(x=>!x.endDate);
+  const pastMeds = allMeds.filter(x=>x.endDate);
+  const tl = timelineFor(memberId);
   let text = `Patient: ${m.name} (${m.role||'family member'})\n`;
   if(m.dob) text += `DOB: ${formatDob(m.dob)}\n`;
   if(m.blood) text += `Blood group: ${m.blood}\n`;
   if(m.emergencyName) text += `Emergency contact: ${m.emergencyName}${m.emergencyPhone?` (${m.emergencyCode||''} ${m.emergencyPhone})`:''}\n`;
   text += `\nCurrent medications:\n` + (meds.length ? meds.map(x=>`- ${x.name}${x.dose?' ('+x.dose+')':''}${x.notes?' — '+x.notes:''}`).join('\n') : '- none recorded');
+  if(pastMeds.length){
+    text += `\n\nPast medications (discontinued):\n` + pastMeds.map(x=>`- ${x.name}${x.dose?' ('+x.dose+')':''}, stopped ${x.endDate}${x.discontinueNote?' — '+x.discontinueNote:''}`).join('\n');
+  }
   text += `\n\nTimeline:\n` + (tl.length ? tl.map(x=>{
     if(x.type==='visit') return `- [${x.date}] Doctor visit with ${x.doctor||'unknown'}: ${x.diagnosis||x.note||''}${x.followup?' (follow-up '+x.followup+')':''}`;
     if(x.type==='reading') return `- [${x.date}] ${x.metric}: ${x.value} ${x.unit||''}`;
@@ -612,6 +666,7 @@ function render(){
     ${modal ? renderModal() : ''}
     ${sheet ? renderSheet() : ''}
     ${famModal ? renderFamilyModal() : ''}
+    ${discontinueTarget ? renderDiscontinueModal() : ''}
   `;
 
   // wire up field listeners that need direct binding (member overview inline fields)
@@ -669,7 +724,7 @@ function renderFamily(){
 function renderFamilyList(list){
   if(!list.length) return `<div class="empty">No family members match your search.</div>`;
   return list.map(m=>{
-    const meds = medsFor(m.id).length, conds = (state.timeline[m.id]||[]).filter(t=>t.type==='condition').length;
+    const meds = activeMedsFor(m.id).length, conds = (state.timeline[m.id]||[]).filter(t=>t.type==='condition').length;
     return `<div class="fam-card ${m.id===state.activeMember?'active':''}" onclick="selectMember('${m.id}')">
       <div class="avatar" style="background:${avatarColor(m.name)};">${initials(m.name)}</div>
       <div class="fam-info">
@@ -690,7 +745,7 @@ function renderList(){
 
 function renderMember(tab){
   const m = activeMember();
-  const meds = medsFor(m.id);
+  const meds = activeMedsFor(m.id);
   const tl = timelineFor(m.id);
   const allergies = tl.filter(t=>t.type==='allergy');
   const readingsByMetric = {};
@@ -787,7 +842,7 @@ function renderMember(tab){
             <span class="pill ${med.status==='review'?'review':'active'}">${med.status==='review'?'Review needed':'Active'}</span>
             <div style="display:flex;gap:8px;">
               <button class="del" onclick="openEditMed('${m.id}','${med.id}')">edit</button>
-              <button class="del" onclick="delMed('${m.id}','${med.id}')">remove</button>
+              <button class="del" onclick="openDiscontinue('${m.id}','${med.id}')">remove</button>
             </div>
           </div>
         </div>
@@ -872,6 +927,31 @@ function renderFamilyModal(){
   `;
 }
 
+function renderDiscontinueModal(){
+  const {memberId, medId} = discontinueTarget;
+  const med = (state.meds[memberId]||[]).find(x=>x.id===medId);
+  if(!med) return '';
+  const today = new Date().toISOString().slice(0,10);
+  return `
+    <div class="modal-bg" onclick="if(event.target===this) closeDiscontinue()">
+      <div class="modal">
+        <div class="modal-head"><h2>Discontinue ${med.name}?</h2><button class="close" onclick="closeDiscontinue()">&times;</button></div>
+        <form onsubmit="confirmDiscontinue(event)">
+          <div class="field"><label>Date stopped</label><input id="dc-date" type="date" value="${today}"></div>
+          <div class="field"><label>Note (optional)</label><input id="dc-note" placeholder="e.g. switched to Insulin"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn ghost" onclick="closeDiscontinue()">Cancel</button>
+            <button type="submit" class="btn primary">Discontinue</button>
+          </div>
+        </form>
+        <div style="text-align:center;margin-top:12px;">
+          <button type="button" class="del" onclick="deleteMedWithoutLogging()">Added by mistake? Delete without logging</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderModal(){
   const cat = modal.category;
   const isEdit = !!modal.editId;
@@ -899,6 +979,7 @@ function renderModal(){
         <option value="active" ${existing?.status!=='review'?'selected':''}>Active</option>
         <option value="review" ${existing?.status==='review'?'selected':''}>Review needed</option>
       </select></div>
+      <div class="field"><label>End date (optional — leave blank if still taking it)</label><input id="f-enddate" type="date" value="${v(existing?.endDate)}"></div>
       <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Dosage instructions, doctor's advice…">${v(existing?.notes)}</textarea></div>
     `;
   } else if(cat === 'visit'){
@@ -946,7 +1027,7 @@ function renderModal(){
 
 function renderSheet(){
   const m = activeMember();
-  const meds = medsFor(m.id);
+  const meds = activeMedsFor(m.id);
   const tl = timelineFor(m.id);
   let title = '', rows = '';
 
@@ -960,7 +1041,7 @@ function renderSheet(){
         </div>
         <div style="display:flex;gap:10px;flex-shrink:0;">
           <button class="del" onclick="sheetEditMed('${m.id}','${med.id}')">edit</button>
-          <button class="del" onclick="sheetDeleteMed('${m.id}','${med.id}')">delete</button>
+          <button class="del" onclick="openDiscontinue('${m.id}','${med.id}')">delete</button>
         </div>
       </div>
     `).join('') : '<div class="empty">No medications recorded.</div>';
