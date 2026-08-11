@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 13 (fix diastolic tap bug + scroll-snap on charts) -->
+<!-- VAULT-BUILD-VERSION: 14 (edit/delete family member with cascade) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -438,19 +438,42 @@ function openMemberAssistant(id){
   save(); render();
 }
 
-function openAddFamilyModal(){ famModal = true; render(); }
+function openAddFamilyModal(){ famModal = {editId:null}; render(); }
+function openEditFamilyModal(id){ famModal = {editId:id}; render(); }
 function closeFamilyModal(){ famModal = false; render(); }
 function submitFamilyModal(e){
   e.preventDefault();
   const name = document.getElementById('fm-name').value.trim();
   if(!name) return;
   const role = document.getElementById('fm-role').value.trim();
-  const id = uid();
-  state.members.push({id,name,role,dob:'',blood:'',emergencyName:'',emergencyCode:'+91',emergencyPhone:''});
-  state.meds[id]=[]; state.timeline[id]=[];
-  state.activeMember = id; state.activeTab='overview';
+  if(famModal.editId){
+    const m = state.members.find(x=>x.id===famModal.editId);
+    if(m){ m.name = name; m.role = role; }
+  } else {
+    const id = uid();
+    state.members.push({id,name,role,dob:'',blood:'',emergencyName:'',emergencyCode:'+91',emergencyPhone:''});
+    state.meds[id]=[]; state.timeline[id]=[];
+    state.activeMember = id; state.activeTab='overview';
+  }
   famModal = false;
   save(); render();
+}
+function deleteFamilyMember(id){
+  const m = state.members.find(x=>x.id===id);
+  if(!m) return;
+  showConfirm(`This permanently deletes ${m.name} and all of their medications, timeline entries, and assistant chat history. This cannot be undone.`, ()=>{
+    state.members = state.members.filter(x=>x.id!==id);
+    delete state.meds[id];
+    delete state.timeline[id];
+    delete state.chats[id];
+    if(assistantScope.type==='member' && assistantScope.id===id) assistantScope = {type:'family'};
+    if(state.activeMember === id){
+      state.activeMember = state.members[0] ? state.members[0].id : null;
+    }
+    state.activeTab = 'family';
+    famModal = false;
+    save(); render();
+  }, 'Delete permanently');
 }
 
 function openAddModal(){ modal = {category:'medication', editId:null, editType:null}; render(); }
@@ -818,7 +841,10 @@ function render(){
         <h1>${topTitle(tab)}</h1>
         <div class="sub">${topSub(tab)}</div>
       </div>
-      <button class="icon-btn" onclick="resetAll()" title="Reset demo">&#8635;</button>
+      <div style="display:flex;gap:6px;">
+        ${tab==='overview' ? `<button class="icon-btn" onclick="openEditFamilyModal('${activeMember().id}')" title="Edit profile">&#9998;</button>` : ''}
+        <button class="icon-btn" onclick="resetAll()" title="Reset demo">&#8635;</button>
+      </div>
     </div>
     <div class="content">${body}</div>
     <div class="bottom-nav">
@@ -1071,18 +1097,23 @@ function renderSettings(){
 }
 
 function renderFamilyModal(){
+  const isEdit = !!famModal.editId;
+  const m = isEdit ? state.members.find(x=>x.id===famModal.editId) : null;
   return `
     <div class="modal-bg" onclick="if(event.target===this) closeFamilyModal()">
       <div class="modal">
-        <div class="modal-head"><h2>Add family member</h2><button class="close" onclick="closeFamilyModal()">&times;</button></div>
+        <div class="modal-head"><h2>${isEdit ? 'Edit family member' : 'Add family member'}</h2><button class="close" onclick="closeFamilyModal()">&times;</button></div>
         <form onsubmit="submitFamilyModal(event)">
-          <div class="field"><label>Name</label><input id="fm-name" placeholder="e.g. Harish Sharma" autofocus></div>
-          <div class="field"><label>Relation</label><input id="fm-role" placeholder="e.g. Grandfather, Sister"></div>
+          <div class="field"><label>Name</label><input id="fm-name" placeholder="e.g. Harish Sharma" value="${isEdit?(m?.name||''):''}" autofocus></div>
+          <div class="field"><label>Relation</label><input id="fm-role" placeholder="e.g. Grandfather, Sister" value="${isEdit?(m?.role||''):''}"></div>
           <div class="modal-actions">
             <button type="button" class="btn ghost" onclick="closeFamilyModal()">Cancel</button>
-            <button type="submit" class="btn primary">Add member</button>
+            <button type="submit" class="btn primary">${isEdit ? 'Save changes' : 'Add member'}</button>
           </div>
         </form>
+        ${isEdit ? `<div style="text-align:center;margin-top:12px;">
+          <button type="button" class="del" onclick="deleteFamilyMember('${m.id}')">Delete ${m.name.split(' ')[0]}'s profile</button>
+        </div>` : ''}
       </div>
     </div>
   `;
