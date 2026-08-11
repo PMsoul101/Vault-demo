@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 11 (Stage 2: medication discontinue flow + history) -->
+<!-- VAULT-BUILD-VERSION: 13 (fix diastolic tap bug + scroll-snap on charts) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -150,8 +150,17 @@
   .tl-tag.visit{background:var(--sage-bg);color:var(--sage);}
   .tl-tag.reading{background:var(--navy-bg);color:var(--navy-2);}
 
-  .chart-wrap{margin-top:6px;}
-  .chart-label{font-size:11.5px;color:var(--ink-soft);margin-bottom:4px;font-weight:600;}
+  .range-tabs{display:flex;gap:6px;margin-bottom:10px;}
+  .range-tab{font-size:11px;font-weight:700;padding:5px 10px;border-radius:14px;border:1px solid var(--line-strong);
+    background:var(--surface);color:var(--ink-soft);cursor:pointer;transition:background-color 0.15s ease, color 0.15s ease;}
+  .range-tab.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .chart-scroll{overflow-x:auto;margin:0 -4px;padding:0 4px;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;}
+  .chart-inner{position:relative;}
+  .snap-stop{position:absolute;top:0;bottom:0;width:1px;scroll-snap-align:center;pointer-events:none;}
+  .chart-legend{display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--ink-soft);}
+  .chart-legend span{display:flex;align-items:center;gap:5px;}
+  .chart-legend i{width:9px;height:9px;border-radius:50%;display:inline-block;}
+  .chart-disclaimer{font-size:10px;color:var(--ink-faint);margin-top:6px;font-style:italic;}
 
   .action-row{display:flex;gap:8px;margin-top:4px;}
   .btn{font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 12px;border-radius:8px;
@@ -288,6 +297,18 @@ let famSearch = '';
 let famModal = false; // true when the "add family member" modal is open
 let timelineFilter = 'all'; // 'all' | 'condition' | 'visit' | 'reading' | 'allergy'
 let discontinueTarget = null; // {memberId, medId} when the discontinue modal is open
+let confirmModal = null; // {title, message, confirmLabel, onConfirm} — replaces native confirm()
+
+function showConfirm(message, onConfirm, confirmLabel, title){
+  confirmModal = {message, onConfirm, confirmLabel: confirmLabel||'Confirm', title: title||'Are you sure?'};
+  render();
+}
+function closeConfirm(){ confirmModal = null; render(); }
+function runConfirm(){
+  const fn = confirmModal ? confirmModal.onConfirm : null;
+  confirmModal = null;
+  if(fn) fn();
+}
 
 function activeMedsFor(id){ return medsFor(id).filter(x=>!x.endDate); }
 
@@ -330,11 +351,12 @@ function confirmDiscontinue(e){
   save(); render();
 }
 function deleteMedWithoutLogging(){
-  if(!confirm('Delete this medication with no history logged? This cannot be undone.')) return;
   const {memberId, medId} = discontinueTarget;
-  state.meds[memberId] = (state.meds[memberId]||[]).filter(x=>x.id!==medId);
-  discontinueTarget = null;
-  save(); render();
+  showConfirm('This deletes the medication permanently with no history logged. This cannot be undone.', ()=>{
+    state.meds[memberId] = (state.meds[memberId]||[]).filter(x=>x.id!==medId);
+    discontinueTarget = null;
+    save(); render();
+  }, 'Delete');
 }
 
 function metricSlug(metric){
@@ -365,9 +387,10 @@ function closeSheet(){ sheet = null; render(); }
 function sheetEditMed(mid,id){ sheet = null; openEditMed(mid,id); }
 function sheetEditTimeline(mid,id){ sheet = null; openEditTimeline(mid,id); }
 function sheetDeleteTimeline(mid,id){
-  if(!confirm('Delete this record?')) return;
-  state.timeline[mid] = (state.timeline[mid]||[]).filter(x=>x.id!==id);
-  save(); render();
+  showConfirm('This record will be permanently deleted.', ()=>{
+    state.timeline[mid] = (state.timeline[mid]||[]).filter(x=>x.id!==id);
+    save(); render();
+  }, 'Delete');
 }
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
@@ -386,8 +409,9 @@ function save(){
   try{ sessionStorage.setItem('vault-demo-state', JSON.stringify(state)); }catch(e){}
 }
 function resetAll(){
-  if(!confirm('Reset the whole demo back to the Sharma family baseline?')) return;
-  state = seedData(); save(); render();
+  showConfirm('This resets everything back to the Sharma family baseline. Anything you\'ve added will be lost.', ()=>{
+    state = seedData(); save(); render();
+  }, 'Reset');
 }
 
 function activeMember(){ return state.members.find(m=>m.id===state.activeMember) || state.members[0]; }
@@ -444,6 +468,20 @@ function openEditTimeline(memberId, entryId){
 }
 function closeModal(){ modal = null; render(); }
 function pickCategory(c){ if(modal.editId) return; modal.category = c; render(); }
+function toggleReadingFields(){
+  const metric = document.getElementById('f-metric').value;
+  const sugarEl = document.getElementById('sugar-fields');
+  const bpEl = document.getElementById('bp-fields');
+  if(sugarEl) sugarEl.style.display = metric==='Blood Sugar' ? '' : 'none';
+  if(bpEl) bpEl.style.display = metric==='Blood Pressure' ? '' : 'none';
+}
+function bpCategory(sys, dia){
+  if(sys==null || dia==null) return '';
+  if(sys < 90 || dia < 60) return 'Low';
+  if(sys < 120 && dia < 80) return 'Normal';
+  if(sys < 130 && dia < 80) return 'Elevated';
+  return 'High';
+}
 
 function submitModal(e){
   e.preventDefault();
@@ -469,15 +507,28 @@ function submitModal(e){
     if(med) syncMedDiscontinueEntry(m.id, med);
   } else if(cat === 'reading'){
     const metric = document.getElementById('f-metric').value;
-    const value = parseFloat(document.getElementById('f-value').value);
     const date = document.getElementById('f-date').value || new Date().toISOString().slice(0,10);
-    if(!value) return;
     if(!state.timeline[m.id]) state.timeline[m.id]=[];
-    if(modal.editId){
-      const entry = state.timeline[m.id].find(x=>x.id===modal.editId);
-      if(entry){ entry.date=date; entry.metric=metric; entry.title=metric; entry.value=value; entry.unit= metric==='Blood Sugar'?'mg/dL':'mmHg'; }
+    if(metric === 'Blood Pressure'){
+      const systolic = parseFloat(document.getElementById('f-systolic').value);
+      const diastolic = parseFloat(document.getElementById('f-diastolic').value);
+      if(!systolic || !diastolic) return;
+      const value = `${systolic}/${diastolic}`;
+      if(modal.editId){
+        const entry = state.timeline[m.id].find(x=>x.id===modal.editId);
+        if(entry){ entry.date=date; entry.metric=metric; entry.title=metric; entry.systolic=systolic; entry.diastolic=diastolic; entry.value=value; entry.unit='mmHg'; }
+      } else {
+        state.timeline[m.id].push({id:uid(),date,type:'reading',title:metric,metric,systolic,diastolic,value,unit:'mmHg',note:''});
+      }
     } else {
-      state.timeline[m.id].push({id:uid(),date,type:'reading',title:metric,metric,value,unit: metric==='Blood Sugar'?'mg/dL':'mmHg',note:''});
+      const value = parseFloat(document.getElementById('f-value').value);
+      if(!value) return;
+      if(modal.editId){
+        const entry = state.timeline[m.id].find(x=>x.id===modal.editId);
+        if(entry){ entry.date=date; entry.metric=metric; entry.title=metric; entry.value=value; entry.unit='mg/dL'; entry.systolic=null; entry.diastolic=null; }
+      } else {
+        state.timeline[m.id].push({id:uid(),date,type:'reading',title:metric,metric,value,unit:'mg/dL',note:''});
+      }
     }
   } else if(cat === 'visit'){
     const title = document.getElementById('f-title').value.trim();
@@ -510,8 +561,9 @@ function submitModal(e){
 }
 
 function delTimeline(memberId,id){
-  if(!confirm('Remove this timeline entry?')) return;
-  state.timeline[memberId]=(state.timeline[memberId]||[]).filter(x=>x.id!==id); save(); render();
+  showConfirm('This timeline entry will be permanently removed.', ()=>{
+    state.timeline[memberId]=(state.timeline[memberId]||[]).filter(x=>x.id!==id); save(); render();
+  }, 'Remove');
 }
 function updateField(memberId,field,value){ const m=state.members.find(x=>x.id===memberId); if(m) m[field]=value; save(); }
 
@@ -539,7 +591,7 @@ function compileRecordText(memberId){
   }
   text += `\n\nTimeline:\n` + (tl.length ? tl.map(x=>{
     if(x.type==='visit') return `- [${x.date}] Doctor visit with ${x.doctor||'unknown'}: ${x.diagnosis||x.note||''}${x.followup?' (follow-up '+x.followup+')':''}`;
-    if(x.type==='reading') return `- [${x.date}] ${x.metric}: ${x.value} ${x.unit||''}`;
+    if(x.type==='reading') return `- [${x.date}] ${x.metric}: ${x.value} ${x.unit||''}${x.metric==='Blood Pressure'?' ('+bpCategory(x.systolic,x.diastolic)+')':''}`;
     return `- [${x.date}] (${x.type}) ${x.title}${x.note?': '+x.note:''}`;
   }).join('\n') : '- none recorded');
   return text;
@@ -607,28 +659,141 @@ function renderChatText(raw){
 /* ---------- Export ---------- */
 function exportSummary(){ window.print(); }
 
-/* ---------- Trend chart (simple inline SVG) ---------- */
-function trendChart(readings, unit){
-  if(readings.length < 2) return '<div class="empty">Need at least 2 readings to show a trend.</div>';
-  const sorted = readings.slice().sort((a,b)=>a.date.localeCompare(b.date));
-  const vals = sorted.map(r=>r.value);
+/* ---------- Trend chart (interactive, ranged, dark-mode aware SVG) ---------- */
+let chartRanges = {}; // key: `${memberId}:${metric}` -> '1M'|'3M'|'6M'|'1Y'|'All'
+let chartTooltip = null; // {chartKey, pointIndex}
+
+function setChartRange(key, range){ chartRanges[key] = range; chartTooltip = null; render(); }
+function showChartTooltip(chartKey, idx){
+  if(chartTooltip && chartTooltip.chartKey===chartKey && chartTooltip.pointIndex===idx){ chartTooltip = null; }
+  else { chartTooltip = {chartKey, pointIndex: idx}; }
+  render();
+}
+
+function filterByRange(sortedAsc, range){
+  if(range === 'All' || sortedAsc.length===0) return sortedAsc;
+  const days = {'1M':30,'3M':90,'6M':180,'1Y':365}[range];
+  const cutoff = new Date(sortedAsc[sortedAsc.length-1].date+'T00:00:00');
+  cutoff.setDate(cutoff.getDate()-days);
+  const cutoffStr = cutoff.toISOString().slice(0,10);
+  return sortedAsc.filter(r=>r.date >= cutoffStr);
+}
+
+function renderTrendPanel(memberId, metric, readings){
+  const chartKey = `${memberId}:${metric}`;
+  const range = chartRanges[chartKey] || 'All';
+  const sortedAsc = readings.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const filtered = filterByRange(sortedAsc, range);
+  const isBP = metric === 'Blood Pressure';
+  const unit = sortedAsc[0].unit || '';
+
+  const rangeTabs = ['1M','3M','6M','1Y','All'].map(r=>
+    `<button class="range-tab ${range===r?'active':''}" onclick="setChartRange('${chartKey}','${r}')">${r}</button>`
+  ).join('');
+
+  const chartHtml = filtered.length < 2
+    ? '<div class="empty">Need at least 2 readings in this range.</div>'
+    : (isBP ? bpTrendChart(filtered, chartKey) : singleTrendChart(filtered, chartKey, unit));
+
+  return `
+    <div class="panel">
+      <h2>${metric} trend</h2>
+      <div class="range-tabs">${rangeTabs}</div>
+      <div class="chart-scroll">${chartHtml}</div>
+      ${isBP ? `
+        <div class="chart-legend"><span><i style="background:var(--navy);"></i>Higher (systolic)</span><span><i style="background:var(--bp);"></i>Lower (diastolic)</span></div>
+        <div class="chart-disclaimer">Category shown is a general public-health reference, not medical advice.</div>
+      ` : ''}
+    </div>
+  `;
+}
+
+/* Fixed dark tooltip regardless of theme, so it's always readable against light or dark chart backgrounds */
+function renderTooltip(x, y, w, lines){
+  const boxW = Math.max(74, Math.max(...lines.map(l=>l.length))*5.8+16);
+  const boxH = 12 + lines.length*14;
+  let bx = x - boxW/2;
+  if(bx < 2) bx = 2;
+  if(bx + boxW > w-2) bx = w-2-boxW;
+  let by = y - boxH - 12;
+  if(by < 2) by = y + 14;
+  const textLines = lines.map((t,i)=>
+    `<text x="${(bx+8).toFixed(1)}" y="${(by+15+i*14).toFixed(1)}" font-size="9.5" fill="#fff" font-weight="${i===0?400:800}" opacity="${i===0?0.7:1}">${t}</text>`
+  ).join('');
+  return `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${boxW.toFixed(1)}" height="${boxH.toFixed(1)}" rx="6" fill="rgba(15,20,32,0.95)"/>${textLines}`;
+}
+
+function singleTrendChart(points, chartKey, unit){
+  const vals = points.map(p=>p.value);
   const min = Math.min(...vals), max = Math.max(...vals);
   const range = (max-min)||1;
-  const w=280, h=90, pad=10;
-  const pts = sorted.map((r,i)=>{
-    const x = pad + (i/(sorted.length-1))*(w-2*pad);
-    const y = h-pad - ((r.value-min)/range)*(h-2*pad);
-    return [x,y];
-  });
-  const path = pts.map((p,i)=> (i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
-  const dots = pts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#182A4D"/>`).join('');
-  const labels = `<text x="${pts[0][0]}" y="${h-1}" font-size="9" fill="#9298A8">${sorted[0].value}${unit?' '+unit:''}</text>
-    <text x="${pts[pts.length-1][0]-18}" y="${h-1}" font-size="9" fill="#9298A8">${sorted[sorted.length-1].value}${unit?' '+unit:''}</text>`;
-  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
-    <path d="${path}" fill="none" stroke="#182A4D" stroke-width="2"/>
-    ${dots}${labels}
-  </svg>`;
+  const w = Math.max(280, points.length*46);
+  const h = 130, pad = 20;
+  const xs = points.map((p,i)=> points.length===1 ? w/2 : pad + (i/(points.length-1))*(w-2*pad));
+  const ys = points.map(p=> h-pad - ((p.value-min)/range)*(h-2.6*pad));
+  const path = xs.map((x,i)=>(i===0?'M':'L')+x.toFixed(1)+','+ys[i].toFixed(1)).join(' ');
+  const active = chartTooltip && chartTooltip.chartKey===chartKey ? chartTooltip.pointIndex : null;
+  const dots = points.map((p,i)=>`
+    <circle cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="10" fill="transparent" style="cursor:pointer;" onclick="showChartTooltip('${chartKey}',${i})"/>
+    <circle cx="${xs[i].toFixed(1)}" cy="${ys[i].toFixed(1)}" r="${active===i?4.5:3.5}" fill="var(--navy)" style="pointer-events:none;"/>
+  `).join('');
+  const hitZones = points.map((p,i)=>`
+    <rect x="${(xs[i]-14).toFixed(1)}" y="0" width="28" height="${h}" fill="transparent" style="cursor:pointer;" onclick="showChartTooltip('${chartKey}',${i})"/>
+  `).join('');
+  const tooltip = active!=null ? renderTooltip(xs[active], ys[active], w, [points[active].date, `${points[active].value} ${unit}`]) : '';
+  const snapStops = xs.map(x=>`<div class="snap-stop" style="left:${x.toFixed(1)}px;"></div>`).join('');
+  return `<div class="chart-inner" style="width:${w}px;">
+    ${snapStops}
+    <svg viewBox="0 0 ${w} ${h}" style="width:${w}px;height:auto;display:block;">
+      <path d="${path}" fill="none" stroke="var(--navy)" stroke-width="2"/>
+      ${hitZones}
+      ${dots}
+      ${tooltip}
+    </svg>
+  </div>`;
 }
+
+function bpTrendChart(points, chartKey){
+  const allVals = points.flatMap(p=>[p.systolic,p.diastolic]);
+  const min = Math.min(...allVals), max = Math.max(...allVals);
+  const range = (max-min)||1;
+  const w = Math.max(280, points.length*46);
+  const h = 130, pad = 20;
+  const xs = points.map((p,i)=> points.length===1 ? w/2 : pad + (i/(points.length-1))*(w-2*pad));
+  const ySys = points.map(p=> h-pad - ((p.systolic-min)/range)*(h-2.6*pad));
+  const yDia = points.map(p=> h-pad - ((p.diastolic-min)/range)*(h-2.6*pad));
+  const pathSys = xs.map((x,i)=>(i===0?'M':'L')+x.toFixed(1)+','+ySys[i].toFixed(1)).join(' ');
+  const pathDia = xs.map((x,i)=>(i===0?'M':'L')+x.toFixed(1)+','+yDia[i].toFixed(1)).join(' ');
+  const active = chartTooltip && chartTooltip.chartKey===chartKey ? chartTooltip.pointIndex : null;
+  const dotsDia = points.map((p,i)=>`
+    <circle cx="${xs[i].toFixed(1)}" cy="${yDia[i].toFixed(1)}" r="12" fill="transparent" style="cursor:pointer;" onclick="showChartTooltip('${chartKey}',${i})"/>
+    <circle cx="${xs[i].toFixed(1)}" cy="${yDia[i].toFixed(1)}" r="${active===i?4.5:3.5}" fill="var(--bp)" style="pointer-events:none;"/>
+  `).join('');
+  const dotsSys = points.map((p,i)=>`
+    <circle cx="${xs[i].toFixed(1)}" cy="${ySys[i].toFixed(1)}" r="12" fill="transparent" style="cursor:pointer;" onclick="showChartTooltip('${chartKey}',${i})"/>
+    <circle cx="${xs[i].toFixed(1)}" cy="${ySys[i].toFixed(1)}" r="${active===i?4.5:3.5}" fill="var(--navy)" style="pointer-events:none;"/>
+  `).join('');
+  const hitZones = points.map((p,i)=>`
+    <rect x="${(xs[i]-14).toFixed(1)}" y="0" width="28" height="${h}" fill="transparent" style="cursor:pointer;" onclick="showChartTooltip('${chartKey}',${i})"/>
+  `).join('');
+  const tooltip = active!=null ? renderTooltip(xs[active], Math.min(ySys[active],yDia[active]), w, [
+    points[active].date,
+    `${points[active].systolic}/${points[active].diastolic} mmHg`,
+    bpCategory(points[active].systolic, points[active].diastolic)
+  ]) : '';
+  const snapStops = xs.map(x=>`<div class="snap-stop" style="left:${x.toFixed(1)}px;"></div>`).join('');
+  return `<div class="chart-inner" style="width:${w}px;">
+    ${snapStops}
+    <svg viewBox="0 0 ${w} ${h}" style="width:${w}px;height:auto;display:block;">
+      <path d="${pathDia}" fill="none" stroke="var(--bp)" stroke-width="2"/>
+      <path d="${pathSys}" fill="none" stroke="var(--navy)" stroke-width="2"/>
+      ${hitZones}
+      ${dotsDia}${dotsSys}
+      ${tooltip}
+    </svg>
+  </div>`;
+}
+
 
 /* ---------- Render ---------- */
 function render(){
@@ -667,6 +832,7 @@ function render(){
     ${sheet ? renderSheet() : ''}
     ${famModal ? renderFamilyModal() : ''}
     ${discontinueTarget ? renderDiscontinueModal() : ''}
+    ${confirmModal ? renderConfirmModal() : ''}
   `;
 
   // wire up field listeners that need direct binding (member overview inline fields)
@@ -778,18 +944,13 @@ function renderMember(tab){
               <span class="tl-tag ${t.type} ${t.type==='reading'?metricSlug(t.metric):''}">${t.type}</span>
               <span class="tl-title">${t.title}</span>
               ${t.type==='visit' ? `<div class="tl-note">${t.doctor?('Dr. '+t.doctor.replace(/^Dr\.?\s*/,'')+' — '):''}${t.diagnosis||''}${t.followup?' · next follow-up '+t.followup:''}</div>` : ''}
-              ${t.type==='reading' ? `<div class="tl-note">${t.value} ${t.unit||''}</div>` : ''}
+              ${t.type==='reading' ? `<div class="tl-note">${t.value} ${t.unit||''}${t.metric==='Blood Pressure'?' — '+bpCategory(t.systolic,t.diastolic):''}</div>` : ''}
               ${(t.type!=='visit' && t.type!=='reading' && t.note) ? `<div class="tl-note">${t.note}</div>` : ''}
             </div>
           `).join('') : `<div class="empty">${timelineFilter==='all' ? 'No entries yet.' : 'No entries in this category yet.'}</div>`}
         </div>
       </div>
-      ${Object.keys(readingsByMetric).map(metric=>`
-        <div class="panel">
-          <h2>${metric} trend</h2>
-          <div class="chart-wrap">${trendChart(readingsByMetric[metric], readingsByMetric[metric][0].unit)}</div>
-        </div>
-      `).join('')}
+      ${Object.keys(readingsByMetric).map(metric=>renderTrendPanel(m.id, metric, readingsByMetric[metric])).join('')}
     `;
   }
 
@@ -952,6 +1113,21 @@ function renderDiscontinueModal(){
   `;
 }
 
+function renderConfirmModal(){
+  return `
+    <div class="modal-bg" onclick="if(event.target===this) closeConfirm()">
+      <div class="modal" style="max-width:340px;">
+        <div class="modal-head"><h2>${confirmModal.title}</h2><button class="close" onclick="closeConfirm()">&times;</button></div>
+        <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin:0 0 18px;">${confirmModal.message}</p>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" onclick="closeConfirm()">Cancel</button>
+          <button type="button" class="btn primary" onclick="runConfirm()">${confirmModal.confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderModal(){
   const cat = modal.category;
   const isEdit = !!modal.editId;
@@ -991,12 +1167,19 @@ function renderModal(){
       <div class="field"><label>Next follow-up</label><input id="f-followup" type="date" value="${v(existing?.followup)}"></div>
     `;
   } else if(cat === 'reading'){
+    const currentMetric = existing?.metric || 'Blood Sugar';
     fields = `
-      <div class="field"><label>What are you logging?</label><select id="f-metric">
-        <option value="Blood Sugar" ${existing?.metric==='Blood Sugar'?'selected':''}>Blood Sugar</option>
-        <option value="Blood Pressure" ${existing?.metric==='Blood Pressure'?'selected':''}>Blood Pressure</option>
+      <div class="field"><label>What are you logging?</label><select id="f-metric" onchange="toggleReadingFields()">
+        <option value="Blood Sugar" ${currentMetric==='Blood Sugar'?'selected':''}>Blood Sugar</option>
+        <option value="Blood Pressure" ${currentMetric==='Blood Pressure'?'selected':''}>Blood Pressure</option>
       </select></div>
-      <div class="field"><label>Value</label><input id="f-value" type="number" placeholder="e.g. 118" value="${v(existing?.value)}"></div>
+      <div id="sugar-fields" class="field" style="${currentMetric==='Blood Sugar'?'':'display:none;'}">
+        <label>Value (mg/dL)</label><input id="f-value" type="number" placeholder="e.g. 118" value="${v(existing?.value)}">
+      </div>
+      <div id="bp-fields" style="${currentMetric==='Blood Pressure'?'':'display:none;'}">
+        <div class="field"><label>Higher (Systolic)</label><input id="f-systolic" type="number" placeholder="e.g. 128" value="${v(existing?.systolic)}"></div>
+        <div class="field"><label>Lower (Diastolic)</label><input id="f-diastolic" type="number" placeholder="e.g. 82" value="${v(existing?.diastolic)}"></div>
+      </div>
       <div class="field"><label>Date</label><input id="f-date" type="date" value="${v(existing?.date)}"></div>
     `;
   } else {
