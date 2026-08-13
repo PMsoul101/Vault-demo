@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 14 (edit/delete family member with cascade) -->
+<!-- VAULT-BUILD-VERSION: 16 (PDF: add allergy detail table) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -240,9 +240,32 @@
   .settings-item b{display:block;margin-bottom:4px;}
   .settings-item span{color:var(--ink-soft);font-size:12px;line-height:1.5;}
 
+  .print-summary{display:none;}
+
   @media print{
-    .bottom-nav, .demo-banner, .topbar .icon-btn{display:none;}
-    body{background:#fff;}
+    html, [data-theme="dark"]{
+      --bg:#ffffff !important; --surface:#ffffff !important; --surface-2:#ffffff !important;
+      --ink:#12182B !important; --ink-soft:#525A70 !important; --ink-faint:#9298A8 !important;
+      --line:#E4E6EC !important; --line-strong:#D2D5DE !important;
+    }
+    .bottom-nav, .demo-banner, .topbar, .content{display:none !important;}
+    .print-summary{display:block !important;}
+    body{background:#fff !important;color:#12182B !important;}
+    .app{background:#fff !important;max-width:100%;padding:0;}
+    @page{margin:16mm;}
+    .print-summary h1{font-size:20px;margin:0 0 2px;}
+    .print-summary .meta{font-size:11px;color:#525A70;margin-bottom:16px;}
+    .print-summary h2{font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;
+      border-bottom:1px solid #D2D5DE;padding-bottom:4px;margin:16px 0 8px;color:#12182B;}
+    .print-summary table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:2px;}
+    .print-summary th{text-align:left;padding:4px 6px;border-bottom:1px solid #B8BDC9;font-size:10px;
+      text-transform:uppercase;letter-spacing:0.03em;color:#525A70;}
+    .print-summary td{padding:4px 6px;border-bottom:1px solid #E4E6EC;vertical-align:top;}
+    .print-summary .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;font-size:11.5px;}
+    .print-summary .none{font-size:11.5px;color:#767E93;font-style:italic;}
+    .print-summary .note-small{font-size:9.5px;color:#9298A8;margin-top:4px;}
+    .print-summary .foot{margin-top:22px;font-size:9px;color:#9298A8;border-top:1px solid #E4E6EC;padding-top:8px;}
+    .print-summary, .print-summary * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
 </style>
 </head>
@@ -680,6 +703,64 @@ function renderChatText(raw){
 }
 
 /* ---------- Export ---------- */
+function renderPrintSummary(){
+  const m = activeMember();
+  if(!m) return '';
+  const allMeds = medsFor(m.id);
+  const activeMeds = allMeds.filter(x=>!x.endDate);
+  const pastMeds = allMeds.filter(x=>x.endDate);
+  const tl = timelineFor(m.id).slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const conditions = tl.filter(t=>t.type==='condition');
+  const allergies = tl.filter(t=>t.type==='allergy');
+  const visits = tl.filter(t=>t.type==='visit');
+  const readings = tl.filter(t=>t.type==='reading');
+  const today = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+
+  return `
+    <h1>${m.name}</h1>
+    <div class="meta">${m.role||'Family member'} &nbsp;·&nbsp; Medical summary generated ${today} via Vault</div>
+
+    <div class="grid2">
+      <div><b>Date of birth:</b> ${m.dob?formatDob(m.dob):'—'}</div>
+      <div><b>Blood group:</b> ${m.blood||'—'}</div>
+      <div><b>Emergency contact:</b> ${m.emergencyName?`${m.emergencyName} (${m.emergencyCode||''} ${m.emergencyPhone||''})`:'—'}</div>
+      <div><b>Allergies:</b> ${allergies.length? allergies.map(a=>a.title).join(', ') : 'None recorded'}</div>
+    </div>
+
+    <h2>Current Medications</h2>
+    ${activeMeds.length ? `<table><tr><th>Medicine</th><th>Dose</th><th>Status</th></tr>
+      ${activeMeds.map(x=>`<tr><td>${x.name}</td><td>${x.dose||'—'}</td><td>${x.status==='review'?'Review needed':'Active'}</td></tr>`).join('')}
+    </table>` : '<div class="none">None recorded.</div>'}
+
+    ${pastMeds.length ? `<h2>Past Medications</h2>
+    <table><tr><th>Medicine</th><th>Dose</th><th>Stopped</th></tr>
+      ${pastMeds.map(x=>`<tr><td>${x.name}</td><td>${x.dose||'—'}</td><td>${x.endDate}${x.discontinueNote?' — '+x.discontinueNote:''}</td></tr>`).join('')}
+    </table>` : ''}
+
+    <h2>Allergy Details</h2>
+    ${allergies.length ? `<table><tr><th>Date</th><th>Allergy</th><th>Note</th></tr>
+      ${allergies.map(x=>`<tr><td>${x.date||'—'}</td><td>${x.title}</td><td>${x.note||'—'}</td></tr>`).join('')}
+    </table>` : '<div class="none">None recorded.</div>'}
+
+    <h2>Known Conditions</h2>
+    ${conditions.length ? `<table><tr><th>Date</th><th>Condition</th><th>Note</th></tr>
+      ${conditions.map(x=>`<tr><td>${x.date}</td><td>${x.title}</td><td>${x.note||'—'}</td></tr>`).join('')}
+    </table>` : '<div class="none">None recorded.</div>'}
+
+    <h2>Doctor Visits</h2>
+    ${visits.length ? `<table><tr><th>Date</th><th>Visit</th><th>Diagnosis / Notes</th></tr>
+      ${visits.map(x=>`<tr><td>${x.date}</td><td>${x.title}${x.doctor?' — Dr. '+x.doctor.replace(/^Dr\.?\s*/,''):''}</td><td>${x.diagnosis||'—'}${x.followup?' · next follow-up '+x.followup:''}</td></tr>`).join('')}
+    </table>` : '<div class="none">None recorded.</div>'}
+
+    <h2>Readings</h2>
+    ${readings.length ? `<table><tr><th>Date</th><th>Type</th><th>Value</th></tr>
+      ${readings.slice(0,15).map(x=>`<tr><td>${x.date}</td><td>${x.metric}</td><td>${x.value} ${x.unit||''}${x.metric==='Blood Pressure'?' ('+bpCategory(x.systolic,x.diastolic)+')':''}</td></tr>`).join('')}
+    </table>${readings.length>15?`<div class="note-small">Showing 15 most recent of ${readings.length} readings.</div>`:''}` : '<div class="none">None recorded.</div>'}
+
+    <div class="foot">Generated by Vault, a personal family health record demo. This summary reflects data entered by the family and is not a substitute for official medical records.</div>
+  `;
+}
+
 function exportSummary(){ window.print(); }
 
 /* ---------- Trend chart (interactive, ranged, dark-mode aware SVG) ---------- */
@@ -854,6 +935,7 @@ function render(){
       <div class="nav-item ${tab==='assistant'?'active':''}" onclick="goTab('assistant')"><span class="ic">&#128172;</span>Assistant</div>
       <div class="nav-item ${tab==='settings'?'active':''}" onclick="goTab('settings')"><span class="ic">&#9881;</span>Settings</div>
     </div>
+    <div class="print-summary">${renderPrintSummary()}</div>
     ${modal ? renderModal() : ''}
     ${sheet ? renderSheet() : ''}
     ${famModal ? renderFamilyModal() : ''}
