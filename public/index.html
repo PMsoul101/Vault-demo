@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 17 (PDF date format fix + subtitle capitalization) -->
+<!-- VAULT-BUILD-VERSION: 18 (personal care team + emergency & care resources) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -194,6 +194,8 @@
     padding:20px 20px 22px;max-height:82vh;overflow-y:auto;box-shadow:0 20px 60px rgba(18,24,43,0.35);}
   .modal h2{font-size:15px;margin:0 0 14px;font-weight:800;}
   .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .modal-head h2{display:flex;justify-content:space-between;align-items:center;flex:1;margin-right:10px;}
+  .modal-head h2 .add-mini{font-size:11.5px;color:var(--navy);font-weight:700;cursor:pointer;}
   .modal-head .close{border:none;background:var(--surface-2);width:28px;height:28px;border-radius:50%;
     color:var(--ink-soft);cursor:pointer;font-size:13px;}
   .cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
@@ -307,6 +309,19 @@ function seedData(){
       m1:[{id:'t11',date:'2025-03-01',type:'allergy',title:'Shellfish',note:'Mild reaction, confirmed by allergist'}],
       m4:[{id:'t12',date:'2022-04-11',type:'allergy',title:'Pollen',note:'Seasonal, worse in spring'}],
     },
+    careTeam: {
+      m2:[
+        {id:'c1',name:'Dr. Nair',specialty:'Cardiologist',phone:'+91 98xxxxxx11',address:'Apollo Heart Clinic, Saket, Delhi'},
+        {id:'c2',name:'Dr. Iyer',specialty:'Endocrinologist (diabetes)',phone:'+91 98xxxxxx12',address:'Max Healthcare, Saket, Delhi'},
+      ],
+      m3:[{id:'c3',name:'Dr. Rao',specialty:'Endocrinologist (thyroid)',phone:'+91 98xxxxxx13',address:'Max Healthcare, Saket, Delhi'}],
+      m1:[],
+      m4:[],
+    },
+    householdResources: [
+      {id:'h1',name:'Max Hospital Saket',reason:'Ambulance with ICU support',phone:'+91 11-xxxxxxx1',address:'Saket, Delhi'},
+      {id:'h2',name:'Apollo Pharmacy',reason:"Family's regular pharmacy",phone:'+91 11-xxxxxxx2',address:'Saket, Delhi'},
+    ],
     activeMember:'m2', activeTab:'family', chats:{}, familyChat:[]
   };
 }
@@ -321,6 +336,36 @@ let famModal = false; // true when the "add family member" modal is open
 let timelineFilter = 'all'; // 'all' | 'condition' | 'visit' | 'reading' | 'allergy'
 let discontinueTarget = null; // {memberId, medId} when the discontinue modal is open
 let confirmModal = null; // {title, message, confirmLabel, onConfirm} — replaces native confirm()
+let householdSheetOpen = false;
+
+function openHouseholdSheet(){ householdSheetOpen = true; render(); }
+function closeHouseholdSheet(){ householdSheetOpen = false; render(); }
+function sheetEditHousehold(id){ householdSheetOpen = false; openHouseholdModal(id); }
+
+function renderHouseholdSheet(){
+  const items = state.householdResources || [];
+  const rows = items.length ? items.map(h => `
+    <div class="sheet-row">
+      <div>
+        <div class="stitle">${h.name}</div>
+        <div class="snote">${h.reason||''}${h.phone?' · '+h.phone:''}${h.address?' · '+h.address:''}</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-shrink:0;">
+        <button class="del" onclick="sheetEditHousehold('${h.id}')">edit</button>
+        <button class="del" onclick="deleteHouseholdResource('${h.id}')">delete</button>
+      </div>
+    </div>
+  `).join('') : '<div class="empty">No hospitals, pharmacies, or other resources saved yet.</div>';
+
+  return `
+    <div class="modal-bg" onclick="if(event.target===this) closeHouseholdSheet()">
+      <div class="modal">
+        <div class="modal-head"><h2>Emergency &amp; care resources <span class="add-mini" onclick="closeHouseholdSheet(); openHouseholdModal(null);">+ Add</span></h2><button class="close" onclick="closeHouseholdSheet()">&times;</button></div>
+        ${rows}
+      </div>
+    </div>
+  `;
+}
 
 function showConfirm(message, onConfirm, confirmLabel, title){
   confirmModal = {message, onConfirm, confirmLabel: confirmLabel||'Confirm', title: title||'Are you sure?'};
@@ -334,6 +379,63 @@ function runConfirm(){
 }
 
 function activeMedsFor(id){ return medsFor(id).filter(x=>!x.endDate); }
+
+/* ---------- Personal Care Team (per-member) ---------- */
+let careTeamModal = null; // {editId} or null
+function openCareTeamModal(editId){ careTeamModal = {editId}; render(); }
+function closeCareTeamModal(){ careTeamModal = null; render(); }
+function submitCareTeamModal(e){
+  e.preventDefault();
+  const name = document.getElementById('ct-name').value.trim();
+  if(!name) return;
+  const specialty = document.getElementById('ct-specialty').value.trim();
+  const phone = document.getElementById('ct-phone').value.trim();
+  const address = document.getElementById('ct-address').value.trim();
+  const m = activeMember();
+  if(!state.careTeam[m.id]) state.careTeam[m.id] = [];
+  if(careTeamModal.editId){
+    const c = state.careTeam[m.id].find(x=>x.id===careTeamModal.editId);
+    if(c){ c.name=name; c.specialty=specialty; c.phone=phone; c.address=address; }
+  } else {
+    state.careTeam[m.id].push({id:uid(), name, specialty, phone, address});
+  }
+  careTeamModal = null;
+  save(); render();
+}
+function deleteCareTeamContact(memberId, id){
+  showConfirm('This contact will be permanently removed from the care team.', ()=>{
+    state.careTeam[memberId] = (state.careTeam[memberId]||[]).filter(x=>x.id!==id);
+    save(); render();
+  }, 'Remove');
+}
+
+/* ---------- Emergency & Family Services (household-wide) ---------- */
+let householdModal = null; // {editId} or null
+function openHouseholdModal(editId){ householdModal = {editId}; render(); }
+function closeHouseholdModal(){ householdModal = null; render(); }
+function submitHouseholdModal(e){
+  e.preventDefault();
+  const name = document.getElementById('hh-name').value.trim();
+  if(!name) return;
+  const reason = document.getElementById('hh-reason').value.trim();
+  const phone = document.getElementById('hh-phone').value.trim();
+  const address = document.getElementById('hh-address').value.trim();
+  if(!state.householdResources) state.householdResources = [];
+  if(householdModal.editId){
+    const h = state.householdResources.find(x=>x.id===householdModal.editId);
+    if(h){ h.name=name; h.reason=reason; h.phone=phone; h.address=address; }
+  } else {
+    state.householdResources.push({id:uid(), name, reason, phone, address});
+  }
+  householdModal = null;
+  save(); render();
+}
+function deleteHouseholdResource(id){
+  showConfirm('This entry will be permanently removed.', ()=>{
+    state.householdResources = (state.householdResources||[]).filter(x=>x.id!==id);
+    save(); render();
+  }, 'Remove');
+}
 
 /* Keeps a medication's Timeline entry in sync with its endDate.
    Setting an endDate creates/updates a "discontinued" entry; clearing it removes that entry. */
@@ -423,7 +525,13 @@ function uid(){ return Math.random().toString(36).slice(2,9); }
 function loadState(){
   try{
     const raw = sessionStorage.getItem('vault-demo-state');
-    if(raw){ state = JSON.parse(raw); return; }
+    if(raw){
+      state = JSON.parse(raw);
+      if(!state.careTeam) state.careTeam = {};
+      state.members.forEach(m=>{ if(!state.careTeam[m.id]) state.careTeam[m.id] = []; });
+      if(!state.householdResources) state.householdResources = [];
+      return;
+    }
   }catch(e){}
   state = seedData();
   save();
@@ -475,7 +583,7 @@ function submitFamilyModal(e){
   } else {
     const id = uid();
     state.members.push({id,name,role,dob:'',blood:'',emergencyName:'',emergencyCode:'+91',emergencyPhone:''});
-    state.meds[id]=[]; state.timeline[id]=[];
+    state.meds[id]=[]; state.timeline[id]=[]; state.careTeam[id]=[];
     state.activeMember = id; state.activeTab='overview';
   }
   famModal = false;
@@ -484,11 +592,12 @@ function submitFamilyModal(e){
 function deleteFamilyMember(id){
   const m = state.members.find(x=>x.id===id);
   if(!m) return;
-  showConfirm(`This permanently deletes ${m.name} and all of their medications, timeline entries, and assistant chat history. This cannot be undone.`, ()=>{
+  showConfirm(`This permanently deletes ${m.name} and all of their medications, timeline entries, care team contacts, and assistant chat history. This cannot be undone.`, ()=>{
     state.members = state.members.filter(x=>x.id!==id);
     delete state.meds[id];
     delete state.timeline[id];
     delete state.chats[id];
+    delete state.careTeam[id];
     if(assistantScope.type==='member' && assistantScope.id===id) assistantScope = {type:'family'};
     if(state.activeMember === id){
       state.activeMember = state.members[0] ? state.members[0].id : null;
@@ -941,6 +1050,9 @@ function render(){
     ${famModal ? renderFamilyModal() : ''}
     ${discontinueTarget ? renderDiscontinueModal() : ''}
     ${confirmModal ? renderConfirmModal() : ''}
+    ${careTeamModal ? renderCareTeamModal() : ''}
+    ${householdModal ? renderHouseholdModal() : ''}
+    ${householdSheetOpen ? renderHouseholdSheet() : ''}
   `;
 
   // wire up field listeners that need direct binding (member overview inline fields)
@@ -991,6 +1103,10 @@ function renderFamily(){
     <div class="search"><span>&#128269;</span><input id="fam-search-input" placeholder="Search family members…" value="${famSearch||''}" oninput="famSearch=this.value; renderList();"></div>
     <div class="fam-count">${list.length} of ${state.members.length} family members</div>
     <div id="fam-list">${renderFamilyList(list)}</div>
+    <div class="readings-link" onclick="openHouseholdSheet()">
+      <span>Emergency &amp; care resources</span>
+      <span class="chev">&#8250;</span>
+    </div>
     <div class="add-fam" onclick="openAddFamilyModal()">+ Add family member</div>
     <div class="trust-note">This is a demo — all data shown is fictional and resets automatically when you next open this page.</div>
   `;
@@ -1022,6 +1138,7 @@ function renderMember(tab){
   const meds = activeMedsFor(m.id);
   const tl = timelineFor(m.id);
   const allergies = tl.filter(t=>t.type==='allergy');
+  const careTeam = state.careTeam[m.id] || [];
   const readingsByMetric = {};
   tl.forEach(t=>{ if(t.type==='reading'){ (readingsByMetric[t.metric]=readingsByMetric[t.metric]||[]).push(t); } });
 
@@ -1097,6 +1214,22 @@ function renderMember(tab){
         <input id="em-phone-input" placeholder="Phone number" value="${m.emergencyPhone||''}" style="flex:1;">
       </div>
       <div class="em-row"><b>Allergies:</b> ${allergies.map(a=>a.title).join(', ') || 'none recorded'}</div>
+    </div>
+
+    <div class="panel">
+      <h2>Personal care team <span class="add-mini" onclick="openCareTeamModal(null)">+ Add</span></h2>
+      ${careTeam.length ? careTeam.map(c=>`
+        <div class="med-row">
+          <div>
+            <div class="name">${c.name}</div>
+            <div class="dose">${c.specialty||''}${c.phone?' · '+c.phone:''}${c.address?' · '+c.address:''}</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="del" onclick="openCareTeamModal('${c.id}')">edit</button>
+            <button class="del" onclick="deleteCareTeamContact('${m.id}','${c.id}')">remove</button>
+          </div>
+        </div>
+      `).join('') : '<div class="empty">No doctors or clinics saved yet.</div>'}
     </div>
 
     <div class="panel">
@@ -1236,6 +1369,53 @@ function renderConfirmModal(){
           <button type="button" class="btn ghost" onclick="closeConfirm()">Cancel</button>
           <button type="button" class="btn primary" onclick="runConfirm()">${confirmModal.confirmLabel}</button>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderCareTeamModal(){
+  const m = activeMember();
+  const isEdit = !!careTeamModal.editId;
+  const c = isEdit ? (state.careTeam[m.id]||[]).find(x=>x.id===careTeamModal.editId) : null;
+  return `
+    <div class="modal-bg" onclick="if(event.target===this) closeCareTeamModal()">
+      <div class="modal">
+        <div class="modal-head"><h2>${isEdit?'Edit contact':'Add doctor / clinic'}</h2><button class="close" onclick="closeCareTeamModal()">&times;</button></div>
+        <form onsubmit="submitCareTeamModal(event)">
+          <div class="field"><label>Name</label><input id="ct-name" placeholder="e.g. Dr. Nair" value="${isEdit?(c?.name||''):''}" autofocus></div>
+          <div class="field"><label>Specialty / reason</label><input id="ct-specialty" placeholder="e.g. Cardiologist, ACL surgeon" value="${isEdit?(c?.specialty||''):''}"></div>
+          <div class="field"><label>Phone</label><input id="ct-phone" placeholder="e.g. +91 98xxxxxx11" value="${isEdit?(c?.phone||''):''}"></div>
+          <div class="field"><label>Address</label><input id="ct-address" placeholder="e.g. Apollo Heart Clinic, Saket, Delhi" value="${isEdit?(c?.address||''):''}"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn ghost" onclick="closeCareTeamModal()">Cancel</button>
+            <button type="submit" class="btn primary">${isEdit?'Save changes':'Add contact'}</button>
+          </div>
+        </form>
+        ${isEdit ? `<div style="text-align:center;margin-top:12px;"><button type="button" class="del" onclick="closeCareTeamModal(); deleteCareTeamContact('${m.id}','${c.id}')">Remove this contact</button></div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderHouseholdModal(){
+  const isEdit = !!householdModal.editId;
+  const h = isEdit ? (state.householdResources||[]).find(x=>x.id===householdModal.editId) : null;
+  return `
+    <div class="modal-bg" onclick="if(event.target===this) closeHouseholdModal()">
+      <div class="modal">
+        <div class="modal-head"><h2>${isEdit?'Edit entry':'Add emergency / family service'}</h2><button class="close" onclick="closeHouseholdModal()">&times;</button></div>
+        <form onsubmit="submitHouseholdModal(event)">
+          <div class="field"><label>Name</label><input id="hh-name" placeholder="e.g. Max Hospital Saket" value="${isEdit?(h?.name||''):''}" autofocus></div>
+          <div class="field"><label>What it's for</label><input id="hh-reason" placeholder="e.g. Ambulance with ICU support" value="${isEdit?(h?.reason||''):''}"></div>
+          <div class="field"><label>Phone</label><input id="hh-phone" placeholder="e.g. +91 11-xxxxxxx1" value="${isEdit?(h?.phone||''):''}"></div>
+          <div class="field"><label>Address</label><input id="hh-address" placeholder="e.g. Saket, Delhi" value="${isEdit?(h?.address||''):''}"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn ghost" onclick="closeHouseholdModal()">Cancel</button>
+            <button type="submit" class="btn primary">${isEdit?'Save changes':'Add entry'}</button>
+          </div>
+        </form>
+        ${isEdit ? `<div style="text-align:center;margin-top:12px;"><button type="button" class="del" onclick="closeHouseholdModal(); deleteHouseholdResource('${h.id}')">Remove this entry</button></div>` : ''}
       </div>
     </div>
   `;
