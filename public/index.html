@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 18 (personal care team + emergency & care resources) -->
+<!-- VAULT-BUILD-VERSION: 19 (KINORA rebrand: logo, favicon, nav icons) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Vault — family health records (demo)</title>
+<title>KINORA — family health records (demo)</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNDAgMjQwIj4KICAgICAgPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMEQxQjJBIiBzdHJva2Utd2lkdGg9IjEyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogICAgICAgIDxwYXRoIGQ9Ik0xMjYgNDUgQTkyIDkyIDAgMSAwIDE1MyAxOTYiLz4KICAgICAgICA8cGF0aCBkPSJNODYgNzAgVjE3OCIvPgogICAgICAgIDxwYXRoIGQ9Ik04OCAxMjUgTDE1MyA2OCIvPgogICAgICAgIDxwYXRoIGQ9Ik04OSAxMjQgTDE1NCAxODEiLz4KICAgICAgPC9nPgogICAgICA8ZyBzdHJva2U9IiMyMUI2QTgiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj4KICAgICAgICA8cGF0aCBkPSJNMTY4IDExNiBIMjAyIi8+CiAgICAgICAgPHBhdGggZD0iTTE4NSA5OSBWMTMzIi8+CiAgICAgIDwvZz48L3N2Zz4=">
 <style>
   :root{
     color-scheme: light;
@@ -51,6 +52,11 @@
   .topbar{background:var(--surface);border-bottom:1px solid var(--line);
     padding:14px 18px;display:flex;justify-content:space-between;align-items:center;}
   .topbar h1{font-size:17px;margin:0;font-weight:700;letter-spacing:-0.01em;}
+  .brand-h1{display:flex;align-items:center;gap:7px;letter-spacing:0.04em;font-weight:800;}
+  .brand-icon{width:22px;height:22px;display:flex;flex-shrink:0;}
+  .brand-icon svg{width:100%;height:100%;}
+  .brand-logo-full{width:100%;max-width:260px;margin-bottom:10px;}
+  .brand-logo-full svg{width:100%;height:auto;display:block;}
   .topbar .sub{font-size:11.5px;color:var(--ink-faint);margin-top:1px;}
   .icon-btn{border:none;background:var(--surface-2);width:32px;height:32px;border-radius:50%;
     display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--ink-soft);}
@@ -175,7 +181,8 @@
     background:var(--surface);border-top:1px solid var(--line);display:flex;z-index:10;transition:background-color 0.2s ease, border-color 0.2s ease;}
   .nav-item{flex:1;text-align:center;padding:9px 4px 10px;font-size:10.5px;color:var(--ink-faint);
     cursor:pointer;font-weight:600;transition:color 0.15s ease;}
-  .nav-item .ic{font-size:17px;display:block;margin-bottom:2px;}
+  .nav-item .ic{display:flex;justify-content:center;margin-bottom:3px;}
+  .nav-item .ic svg{width:20px;height:20px;}
   .nav-item.active{color:var(--navy);}
   .nav-item:active{opacity:0.7;}
 
@@ -324,6 +331,79 @@ function seedData(){
     ],
     activeMember:'m2', activeTab:'family', chats:{}, familyChat:[]
   };
+}
+
+/* KINORA brand assets — official SVGs, embedded verbatim, unaltered. */
+const KINORA_ICON_LIGHT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+      <g fill="none" stroke="#0D1B2A" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M126 45 A92 92 0 1 0 153 196"/>
+        <path d="M86 70 V178"/>
+        <path d="M88 125 L153 68"/>
+        <path d="M89 124 L154 181"/>
+      </g>
+      <g stroke="#21B6A8" stroke-width="9" stroke-linecap="round">
+        <path d="M168 116 H202"/>
+        <path d="M185 99 V133"/>
+      </g></svg>`;
+const KINORA_ICON_DARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+      <g fill="none" stroke="#F8FAFC" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M126 45 A92 92 0 1 0 153 196"/>
+        <path d="M86 70 V178"/>
+        <path d="M88 125 L153 68"/>
+        <path d="M89 124 L154 181"/>
+      </g>
+      <g stroke="#21B6A8" stroke-width="9" stroke-linecap="round">
+        <path d="M168 116 H202"/>
+        <path d="M185 99 V133"/>
+      </g></svg>`;
+const KINORA_LOGO_LIGHT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 250">
+      
+      <g fill="none" stroke="#0D1B2A" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M126 45 A92 92 0 1 0 153 196"/>
+        <path d="M86 70 V178"/>
+        <path d="M88 125 L153 68"/>
+        <path d="M89 124 L154 181"/>
+      </g>
+      <g stroke="#21B6A8" stroke-width="9" stroke-linecap="round">
+        <path d="M168 116 H202"/>
+        <path d="M185 99 V133"/>
+      </g>
+      <text x="260" y="125" font-family="Inter,Arial,sans-serif" font-size="70" font-weight="650"
+            letter-spacing="12" fill="#0D1B2A">KINORA</text>
+      <text x="264" y="174" font-family="Inter,Arial,sans-serif" font-size="25"
+            fill="#6B7280">Your family’s health, together.</text>
+    </svg>`;
+const KINORA_LOGO_DARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 250">
+      
+      <g fill="none" stroke="#F8FAFC" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M126 45 A92 92 0 1 0 153 196"/>
+        <path d="M86 70 V178"/>
+        <path d="M88 125 L153 68"/>
+        <path d="M89 124 L154 181"/>
+      </g>
+      <g stroke="#21B6A8" stroke-width="9" stroke-linecap="round">
+        <path d="M168 116 H202"/>
+        <path d="M185 99 V133"/>
+      </g>
+      <text x="260" y="125" font-family="Inter,Arial,sans-serif" font-size="70" font-weight="650"
+            letter-spacing="12" fill="#F8FAFC">KINORA</text>
+      <text x="264" y="174" font-family="Inter,Arial,sans-serif" font-size="25"
+            fill="#AAB4C3">Your family’s health, together.</text>
+    </svg>`;
+function isDarkTheme(){ return document.documentElement.getAttribute('data-theme') === 'dark'; }
+function kinoraIcon(){ return isDarkTheme() ? KINORA_ICON_DARK : KINORA_ICON_LIGHT; }
+function kinoraLogo(){ return isDarkTheme() ? KINORA_LOGO_DARK : KINORA_LOGO_LIGHT; }
+
+/* Consistent line-icon set for bottom nav, replacing emoji. Uses currentColor so active/inactive states inherit automatically. */
+const NAV_ICON_PATHS = {
+  family: '<circle cx="9" cy="8" r="3"/><path d="M3.5 20c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5"/><circle cx="17" cy="7" r="2.3"/><path d="M15 14.2c2.6.3 4.5 2.4 4.5 5.3"/>',
+  records: '<path d="M7 3.5h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z"/><path d="M14 3.5V8h4"/><path d="M8.5 12.5h7M8.5 15.5h7M8.5 18h4.5"/>',
+  timeline: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.2 2"/>',
+  assistant: '<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H9l-4 3.5v-3.5H6.5A2.5 2.5 0 0 1 4 13.5v-7z"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.1 5.9l-1.55 1.55M7.45 16.55L5.9 18.1M18.1 18.1l-1.55-1.55M7.45 7.45L5.9 5.9"/>'
+};
+function navIcon(name){
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${NAV_ICON_PATHS[name]||''}</svg>`;
 }
 
 let state = null;
@@ -504,6 +584,7 @@ function loadTheme(){
 function toggleTheme(checked){
   if(checked){ document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('vault-theme','dark'); }
   else { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('vault-theme','light'); }
+  render();
 }
 loadTheme();
 
@@ -827,7 +908,7 @@ function renderPrintSummary(){
 
   return `
     <h1>${m.name}</h1>
-    <div class="meta">${m.role||'Family member'} &nbsp;·&nbsp; Medical summary generated ${today} via Vault</div>
+    <div class="meta">${m.role||'Family member'} &nbsp;·&nbsp; Medical summary generated ${today} via KINORA</div>
 
     <div class="grid2">
       <div><b>Date of birth:</b> ${m.dob?formatDob(m.dob):'—'}</div>
@@ -866,7 +947,7 @@ function renderPrintSummary(){
       ${readings.slice(0,15).map(x=>`<tr><td>${formatDob(x.date)}</td><td>${x.metric}</td><td>${x.value} ${x.unit||''}${x.metric==='Blood Pressure'?' ('+bpCategory(x.systolic,x.diastolic)+')':''}</td></tr>`).join('')}
     </table>${readings.length>15?`<div class="note-small">Showing 15 most recent of ${readings.length} readings.</div>`:''}` : '<div class="none">None recorded.</div>'}
 
-    <div class="foot">Generated by Vault, a personal family health record demo. This summary reflects data entered by the family and is not a substitute for official medical records.</div>
+    <div class="foot">Generated by KINORA, a personal family health record demo. This summary reflects data entered by the family and is not a substitute for official medical records.</div>
   `;
 }
 
@@ -1028,7 +1109,7 @@ function render(){
     <div class="demo-banner">DEMO MODE — Sharma family sample data · resets on your next visit</div>
     <div class="topbar">
       <div>
-        <h1>${topTitle(tab)}</h1>
+        <h1>${tab==='family' ? `<span class="brand-h1"><span class="brand-icon">${kinoraIcon()}</span>KINORA</span>` : topTitle(tab)}</h1>
         <div class="sub">${topSub(tab)}</div>
       </div>
       <div style="display:flex;gap:6px;">
@@ -1038,11 +1119,11 @@ function render(){
     </div>
     <div class="content">${body}</div>
     <div class="bottom-nav">
-      <div class="nav-item ${tab==='family'?'active':''}" onclick="goTab('family')"><span class="ic">&#128193;</span>Family</div>
-      <div class="nav-item ${tab==='overview'?'active':''}" onclick="goTab('overview')"><span class="ic">&#128203;</span>Records</div>
-      <div class="nav-item ${tab==='timeline'?'active':''}" onclick="goTab('timeline')"><span class="ic">&#128336;</span>Timeline</div>
-      <div class="nav-item ${tab==='assistant'?'active':''}" onclick="goTab('assistant')"><span class="ic">&#128172;</span>Assistant</div>
-      <div class="nav-item ${tab==='settings'?'active':''}" onclick="goTab('settings')"><span class="ic">&#9881;</span>Settings</div>
+      <div class="nav-item ${tab==='family'?'active':''}" onclick="goTab('family')"><span class="ic">${navIcon('family')}</span>Family</div>
+      <div class="nav-item ${tab==='overview'?'active':''}" onclick="goTab('overview')"><span class="ic">${navIcon('records')}</span>Records</div>
+      <div class="nav-item ${tab==='timeline'?'active':''}" onclick="goTab('timeline')"><span class="ic">${navIcon('timeline')}</span>Timeline</div>
+      <div class="nav-item ${tab==='assistant'?'active':''}" onclick="goTab('assistant')"><span class="ic">${navIcon('assistant')}</span>Assistant</div>
+      <div class="nav-item ${tab==='settings'?'active':''}" onclick="goTab('settings')"><span class="ic">${navIcon('settings')}</span>Settings</div>
     </div>
     <div class="print-summary">${renderPrintSummary()}</div>
     ${modal ? renderModal() : ''}
@@ -1076,7 +1157,7 @@ function render(){
 }
 
 function topTitle(tab){
-  if(tab==='family') return 'Vault';
+  if(tab==='family') return 'KINORA';
   if(tab==='settings') return 'Settings';
   if(tab==='assistant'){
     if(assistantScope.type==='member'){
@@ -1306,7 +1387,7 @@ function renderSettings(){
     </div>
     <div class="settings-item"><b>Demo mode</b><span>This public demo resets to the fictional Sharma family every time you open it fresh. Anything you add stays only while you keep this tab open.</span></div>
     <div class="settings-item"><b>Your data</b><span>Nothing you type here is sent to or stored on any server other than your own browser session, and the AI questions you ask.</span></div>
-    <div class="settings-item"><b>About Vault</b><span>A concept for organizing a family's medical history in one place, with an AI assistant that can answer a doctor's question instantly from stored records.</span></div>
+    <div class="settings-item"><div class="brand-logo-full">${kinoraLogo()}</div><span>A concept for organizing a family's medical history in one place, with an AI assistant that can answer a doctor's question instantly from stored records.</span></div>
     <button class="btn ghost" style="width:100%;margin-top:6px;" onclick="resetAll()">Reset demo to Sharma family baseline</button>
   `;
 }
