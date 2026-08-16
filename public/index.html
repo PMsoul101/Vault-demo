@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 20 (revert to Vault branding, keep new nav icons) -->
+<!-- VAULT-BUILD-VERSION: 23 (remove logo, fix assistant nav, fix dates app-wide) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -967,7 +967,7 @@ function singleTrendChart(points, chartKey, unit){
   const hitZones = points.map((p,i)=>`
     <rect x="${(xs[i]-14).toFixed(1)}" y="0" width="28" height="${h}" fill="transparent" style="cursor:pointer;" onclick="showChartTooltip('${chartKey}',${i})"/>
   `).join('');
-  const tooltip = active!=null ? renderTooltip(xs[active], ys[active], w, [points[active].date, `${points[active].value} ${unit}`]) : '';
+  const tooltip = active!=null ? renderTooltip(xs[active], ys[active], w, [formatDob(points[active].date), `${points[active].value} ${unit}`]) : '';
   const snapStops = xs.map(x=>`<div class="snap-stop" style="left:${x.toFixed(1)}px;"></div>`).join('');
   return `<div class="chart-inner" style="width:${w}px;">
     ${snapStops}
@@ -1004,7 +1004,7 @@ function bpTrendChart(points, chartKey){
     <rect x="${(xs[i]-14).toFixed(1)}" y="0" width="28" height="${h}" fill="transparent" style="cursor:pointer;" onclick="showChartTooltip('${chartKey}',${i})"/>
   `).join('');
   const tooltip = active!=null ? renderTooltip(xs[active], Math.min(ySys[active],yDia[active]), w, [
-    points[active].date,
+    formatDob(points[active].date),
     `${points[active].systolic}/${points[active].diastolic} mmHg`,
     bpCategory(points[active].systolic, points[active].diastolic)
   ]) : '';
@@ -1174,7 +1174,7 @@ function renderMember(tab){
           ${filtered.length ? filtered.map(t=>`
             <div class="tl-entry ${t.type} ${t.type==='reading'?metricSlug(t.metric):''}">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                <div class="tl-date">${t.date}</div>
+                <div class="tl-date">${formatDob(t.date)}</div>
                 <div style="display:flex;gap:8px;">
                   <button class="del" onclick="openEditTimeline('${m.id}','${t.id}')">edit</button>
                   <button class="del" onclick="delTimeline('${m.id}','${t.id}')">remove</button>
@@ -1199,7 +1199,7 @@ function renderMember(tab){
       <div class="stat-card" onclick="openSheet('meds')"><div class="n">${meds.length}</div><div class="l">Active medications</div></div>
       <div class="stat-card" onclick="openSheet('conditions')"><div class="n">${tl.filter(t=>t.type==='condition').length}</div><div class="l">Known conditions</div></div>
       <div class="stat-card" onclick="openSheet('allergies')"><div class="n">${allergies.length}</div><div class="l">Allergies</div></div>
-      <div class="stat-card" onclick="openSheet('visits')"><div class="n">${(tl.filter(t=>t.type==='visit')[0]||{}).date || '—'}</div><div class="l">Last doctor visit</div></div>
+      <div class="stat-card" onclick="openSheet('visits')"><div class="n">${(tl.filter(t=>t.type==='visit')[0]||{}).date ? formatDob(tl.filter(t=>t.type==='visit')[0].date) : '—'}</div><div class="l">Last doctor visit</div></div>
     </div>
 
     ${Object.keys(readingsByMetric).length ? `
@@ -1289,9 +1289,13 @@ function renderAssistant(){
   `;
 
   return `
-    ${!isMemberScope ? `<div class="scope-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-      ${state.members.map(mm=>`<button class="del" onclick="openMemberAssistant('${mm.id}')">Ask about ${mm.name.split(' ')[0]}</button>`).join('')}
-    </div>` : ''}
+    <div class="scope-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+      ${isMemberScope
+        ? `<button class="del" onclick="goTab('assistant')" style="background:var(--navy);color:#fff;">&larr; Family Assistant</button>
+           ${state.members.filter(mm=>mm.id!==m.id).map(mm=>`<button class="del" onclick="openMemberAssistant('${mm.id}')">Ask about ${mm.name.split(' ')[0]}</button>`).join('')}`
+        : state.members.map(mm=>`<button class="del" onclick="openMemberAssistant('${mm.id}')">Ask about ${mm.name.split(' ')[0]}</button>`).join('')
+      }
+    </div>
     <div id="chat-log" class="chat-log" style="max-height:calc(100vh - 280px);overflow-y:auto;">
       ${chat.length ? chat.map(msg=>`<div class="msg ${msg.role}">${msg.role==='ai' ? renderChatText(msg.text) : msg.text.replace(/</g,'&lt;')}</div>`).join('')
         : `<div class="suggest">${suggestions}</div>`}
@@ -1543,9 +1547,9 @@ function renderSheet(){
     rows = items.length ? items.map(t => `
       <div class="sheet-row">
         <div>
-          <div class="st">${t.date}</div>
+          <div class="st">${formatDob(t.date)}</div>
           <div class="stitle">${t.title}</div>
-          ${t.type==='visit' ? `<div class="snote">${t.doctor?('Dr. '+t.doctor.replace(/^Dr\.?\s*/,'')+' — '):''}${t.diagnosis||''}${t.followup?' · next follow-up '+t.followup:''}</div>` : ''}
+          ${t.type==='visit' ? `<div class="snote">${t.doctor?('Dr. '+t.doctor.replace(/^Dr\.?\s*/,'')+' — '):''}${t.diagnosis||''}${t.followup?' · next follow-up '+formatDob(t.followup):''}</div>` : ''}
           ${(t.type!=='visit' && t.note) ? `<div class="snote">${t.note}</div>` : ''}
         </div>
         <div style="display:flex;gap:10px;flex-shrink:0;">
