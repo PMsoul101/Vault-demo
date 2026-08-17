@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 23 (remove logo, fix assistant nav, fix dates app-wide) -->
+<!-- VAULT-BUILD-VERSION: 24 (fix cheap-looking highlight pills) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -134,6 +134,9 @@
   .filter-chip{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:20px;border:1px solid var(--line-strong);
     background:var(--surface);color:var(--ink-soft);cursor:pointer;transition:background-color 0.15s ease, color 0.15s ease;}
   .filter-chip.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .scope-chip{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:20px;border:1px solid var(--line-strong);
+    background:var(--surface);color:var(--ink-soft);cursor:pointer;transition:background-color 0.15s ease, color 0.15s ease;}
+  .scope-chip.active{background:var(--navy);color:#fff;border-color:var(--navy);}
   .readings-link{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
     padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;
     cursor:pointer;box-shadow:var(--shadow-sm);font-size:13px;font-weight:600;color:var(--ink-soft);
@@ -1163,7 +1166,7 @@ function renderMember(tab){
     ];
     return `
       <div class="scope-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-        ${state.members.map(mm=>`<button class="del ${mm.id===m.id?'active-scope':''}" style="${mm.id===m.id?'background:var(--navy);color:#fff;':''}" onclick="selectMemberTimeline('${mm.id}')">${mm.name.split(' ')[0]}</button>`).join('')}
+        ${state.members.map(mm=>`<button class="scope-chip ${mm.id===m.id?'active':''}" onclick="selectMemberTimeline('${mm.id}')">${mm.name.split(' ')[0]}</button>`).join('')}
       </div>
       <div class="filter-chips">
         ${chips.map(([key,label])=>`<button class="filter-chip ${timelineFilter===key?'active':''}" onclick="setTimelineFilter('${key}')">${label}</button>`).join('')}
@@ -1291,9 +1294,9 @@ function renderAssistant(){
   return `
     <div class="scope-picker" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
       ${isMemberScope
-        ? `<button class="del" onclick="goTab('assistant')" style="background:var(--navy);color:#fff;">&larr; Family Assistant</button>
-           ${state.members.filter(mm=>mm.id!==m.id).map(mm=>`<button class="del" onclick="openMemberAssistant('${mm.id}')">Ask about ${mm.name.split(' ')[0]}</button>`).join('')}`
-        : state.members.map(mm=>`<button class="del" onclick="openMemberAssistant('${mm.id}')">Ask about ${mm.name.split(' ')[0]}</button>`).join('')
+        ? `<button class="scope-chip active" onclick="goTab('assistant')">&larr; Family Assistant</button>
+           ${state.members.filter(mm=>mm.id!==m.id).map(mm=>`<button class="scope-chip" onclick="openMemberAssistant('${mm.id}')">Ask about ${mm.name.split(' ')[0]}</button>`).join('')}`
+        : state.members.map(mm=>`<button class="scope-chip" onclick="openMemberAssistant('${mm.id}')">Ask about ${mm.name.split(' ')[0]}</button>`).join('')
       }
     </div>
     <div id="chat-log" class="chat-log" style="max-height:calc(100vh - 280px);overflow-y:auto;">
