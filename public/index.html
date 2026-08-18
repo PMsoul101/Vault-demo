@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 24 (fix cheap-looking highlight pills) -->
+<!-- VAULT-BUILD-VERSION: 25 (fix flicker on filter/chip clicks) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -183,7 +183,7 @@
   .nav-item.active{color:var(--navy);}
   .nav-item:active{opacity:0.7;}
 
-  .content{animation:fadeIn 0.15s ease;}
+  .content.tab-fade{animation:fadeIn 0.15s ease;}
   @keyframes fadeIn{from{opacity:0;transform:translateY(3px);}to{opacity:1;transform:translateY(0);}}
 
   .settings-toggle-row{display:flex;justify-content:space-between;align-items:center;}
@@ -1026,9 +1026,12 @@ function bpTrendChart(points, chartKey){
 
 
 /* ---------- Render ---------- */
+let lastRenderedTab = null;
 function render(){
   const app = document.getElementById('app');
   const tab = state.activeTab;
+  const tabChanged = lastRenderedTab !== tab;
+  lastRenderedTab = tab;
   let body = '';
 
   if(tab === 'family'){
@@ -1053,7 +1056,7 @@ function render(){
         <button class="icon-btn" onclick="resetAll()" title="Reset demo">&#8635;</button>
       </div>
     </div>
-    <div class="content">${body}</div>
+    <div class="content ${tabChanged ? 'tab-fade' : ''}">${body}</div>
     <div class="bottom-nav">
       <div class="nav-item ${tab==='family'?'active':''}" onclick="goTab('family')"><span class="ic">${navIcon('family')}</span>Family</div>
       <div class="nav-item ${tab==='overview'?'active':''}" onclick="goTab('overview')"><span class="ic">${navIcon('records')}</span>Records</div>
