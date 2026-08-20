@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- VAULT-BUILD-VERSION: 25 (fix flicker on filter/chip clicks) -->
+<!-- VAULT-BUILD-VERSION: 26 (fix diastolic tooltip not toggling off) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -948,9 +948,9 @@ function renderTooltip(x, y, w, lines){
   let by = y - boxH - 12;
   if(by < 2) by = y + 14;
   const textLines = lines.map((t,i)=>
-    `<text x="${(bx+8).toFixed(1)}" y="${(by+15+i*14).toFixed(1)}" font-size="9.5" fill="#fff" font-weight="${i===0?400:800}" opacity="${i===0?0.7:1}">${t}</text>`
+    `<text x="${(bx+8).toFixed(1)}" y="${(by+15+i*14).toFixed(1)}" font-size="9.5" fill="#fff" font-weight="${i===0?400:800}" opacity="${i===0?0.7:1}" pointer-events="none">${t}</text>`
   ).join('');
-  return `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${boxW.toFixed(1)}" height="${boxH.toFixed(1)}" rx="6" fill="rgba(15,20,32,0.95)"/>${textLines}`;
+  return `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${boxW.toFixed(1)}" height="${boxH.toFixed(1)}" rx="6" fill="rgba(15,20,32,0.95)" pointer-events="none"/>${textLines}`;
 }
 
 function singleTrendChart(points, chartKey, unit){
