@@ -25,16 +25,22 @@ Do not translate medical terms, medicine names, or numbers — keep those as-is 
 Patient record:
 ${record || 'No record provided.'}`;
 
+  // Gemini 3.5 Flash defaults to "medium" thinking, which adds noticeable latency.
+  // Looking up facts from a provided record doesn't need deep reasoning, so we use "low".
   const body = JSON.stringify({
     contents: [{ role: 'user', parts: [{ text: question }] }],
-    systemInstruction: { parts: [{ text: systemInstruction }] }
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    generationConfig: {
+      thinkingConfig: { thinkingLevel: 'low' }
+    }
   });
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
 
   const maxAttempts = 3;
-  let lastData = null;
+  let lastMessage = '';
   let lastStatus = 500;
+  let lastWasTransient = false;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -51,20 +57,19 @@ ${record || 'No record provided.'}`;
         return res.status(200).json({ answer });
       }
 
-      lastData = data;
+      lastMessage = data.error?.message || 'Unknown error';
       lastStatus = response.status;
+      lastWasTransient = response.status === 503 || response.status === 429 || /overloaded|high demand|unavailable|try again/i.test(lastMessage);
 
-      // Retry on overload/rate-limit style responses; anything else fails immediately.
-      const message = data.error?.message || '';
-      const isTransient = response.status === 503 || response.status === 429 || /overloaded|high demand|unavailable|try again/i.test(message);
-
-      if (isTransient && attempt < maxAttempts - 1) {
-        await new Promise(r => setTimeout(r, 700 * (attempt + 1))); // short backoff: 0.7s, 1.4s
+      // Retry only on overload/rate-limit style responses; anything else fails immediately.
+      if (lastWasTransient && attempt < maxAttempts - 1) {
+        await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
         continue;
       }
       break;
     } catch (err) {
-      lastData = { error: { message: err.message } };
+      lastMessage = err.message;
+      lastWasTransient = true; // network hiccups are worth retrying
       if (attempt < maxAttempts - 1) {
         await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
         continue;
@@ -72,8 +77,14 @@ ${record || 'No record provided.'}`;
     }
   }
 
-  // All retries exhausted — return a friendly, on-brand message instead of Google's raw error text.
-  return res.status(lastStatus || 500).json({
-    error: "The assistant is a bit busy right now. Please wait a few seconds and try asking again."
-  });
+  // Log the real error so it's visible in Vercel's function logs for debugging.
+  console.error('Gemini request failed:', lastStatus, lastMessage);
+
+  // Friendly message for busy servers; a different, honest message for genuine errors
+  // so a real problem never gets disguised as "just busy".
+  const friendly = lastWasTransient
+    ? "The assistant is a bit busy right now. Please wait a few seconds and try asking again."
+    : "Something went wrong reaching the assistant. Please try again in a moment.";
+
+  return res.status(lastStatus || 500).json({ error: friendly });
 }
