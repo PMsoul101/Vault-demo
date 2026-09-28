@@ -40,7 +40,7 @@ ${record || 'No record provided.'}`;
   const maxAttempts = 3;
   let lastMessage = '';
   let lastStatus = 500;
-  let lastWasTransient = false;
+  let quotaExceeded = false;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -59,17 +59,24 @@ ${record || 'No record provided.'}`;
 
       lastMessage = data.error?.message || 'Unknown error';
       lastStatus = response.status;
-      lastWasTransient = response.status === 503 || response.status === 429 || /overloaded|high demand|unavailable|try again/i.test(lastMessage);
 
-      // Retry only on overload/rate-limit style responses; anything else fails immediately.
-      if (lastWasTransient && attempt < maxAttempts - 1) {
+      // 429 = rate/quota limit. Retrying cannot fix this — the daily allowance is
+      // simply used up, and burning more retries only wastes more of it. Fail immediately.
+      if (response.status === 429) {
+        quotaExceeded = true;
+        break;
+      }
+
+      // 503 / "overloaded" = Google's server is momentarily busy, unrelated to our
+      // own quota. This kind of failure genuinely can resolve within a second or two.
+      const isServerOverload = response.status === 503 || /overloaded|high demand|unavailable/i.test(lastMessage);
+      if (isServerOverload && attempt < maxAttempts - 1) {
         await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
         continue;
       }
       break;
     } catch (err) {
       lastMessage = err.message;
-      lastWasTransient = true; // network hiccups are worth retrying
       if (attempt < maxAttempts - 1) {
         await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
         continue;
@@ -80,11 +87,11 @@ ${record || 'No record provided.'}`;
   // Log the real error so it's visible in Vercel's function logs for debugging.
   console.error('Gemini request failed:', lastStatus, lastMessage);
 
-  // Friendly message for busy servers; a different, honest message for genuine errors
-  // so a real problem never gets disguised as "just busy".
-  const friendly = lastWasTransient
-    ? "The assistant is a bit busy right now. Please wait a few seconds and try asking again."
-    : "Something went wrong reaching the assistant. Please try again in a moment.";
+  const friendly = quotaExceeded
+    ? "The assistant has reached today's usage limit for this demo. Please try again after some time, or check back tomorrow."
+    : /overloaded|high demand|unavailable/i.test(lastMessage)
+      ? "The assistant is a bit busy right now. Please wait a few seconds and try asking again."
+      : "Something went wrong reaching the assistant. Please try again in a moment.";
 
   return res.status(lastStatus || 500).json({ error: friendly });
 }
